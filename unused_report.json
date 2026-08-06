@@ -1,0 +1,33 @@
+{
+  "unusedSrc": [
+    "d:\\Akashatech\\ar-mvp\\src\\app\\favicon.ico",
+    "d:\\Akashatech\\ar-mvp\\src\\app\\page.module.css"
+  ],
+  "unusedPublic": [
+    "d:\\Akashatech\\ar-mvp\\public\\audio\\dad_proximity.mp3",
+    "d:\\Akashatech\\ar-mvp\\public\\file.svg",
+    "d:\\Akashatech\\ar-mvp\\public\\globe.svg",
+    "d:\\Akashatech\\ar-mvp\\public\\grass fountian part.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\character done-draco.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\grass-fountain-draco.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\guide.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\nun-draco.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\nun-mixamo-ready.fbx",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\nun-mixamo-ready.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\nun.fbx",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\nun.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\setpping stone.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\sitting talking.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\spaceship-collider.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\statue-draco.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\stepping-stone-draco.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\tree green done.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\models\\tree-green-draco.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\next.svg",
+    "d:\\Akashatech\\ar-mvp\\public\\outside enviorment of spaceship.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\RobotExpressive.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\staue done.glb",
+    "d:\\Akashatech\\ar-mvp\\public\\vercel.svg",
+    "d:\\Akashatech\\ar-mvp\\public\\window.svg"
+  ]
+}

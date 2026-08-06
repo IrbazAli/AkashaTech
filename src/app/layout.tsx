@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import "./globals.css";
+import Providers from "./Providers";
+import AuthUI from "../components/AuthUI";
 
 export const metadata: Metadata = {
   title: "Akasha Relic Tech - AR MVP",
@@ -21,7 +23,10 @@ export default function RootLayout({
         </Script>
       </head>
       <body>
-        {children}
+        <Providers>
+          <AuthUI />
+          {children}
+        </Providers>
       </body>
     </html>
   );
