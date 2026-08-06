@@ -176,7 +176,7 @@ export default function PrivateRoomScene() {
           const toCam = new THREE.Vector3().subVectors(cam.position, headPos).normalize();
 
           // If camera is in front of avatar (dot product > 0 means within 180 degree cone)
-          if (avatarForward.dot(toCam) > 0) {
+          if (avatarForward.dot(toCam) > 0 && convStateRef.current !== 'WALKING_TO_SOFA' && convStateRef.current !== 'STORY_WALKING') {
             head.lookAt(cam.position);
           }
         }
@@ -359,7 +359,7 @@ export default function PrivateRoomScene() {
       }
 
       // Physics controls
-      if (controls.isLocked) {
+      if (controls.isLocked && convStateRef.current !== 'STORY_SOFA') {
         const speedDelta = deltaTime * (playerOnFloor.current ? 180 : 50);
         if (keyStates['KeyW']) playerVelocity.current.add(getForwardVector().multiplyScalar(speedDelta));
         if (keyStates['KeyS']) playerVelocity.current.add(getForwardVector().multiplyScalar(-speedDelta));
