@@ -751,12 +751,17 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
       // 2. Create Wall on the opposite side of the spaceship (X = 43)
       const wallGeometry = new THREE.BoxGeometry(20, 15, 1);
-      const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+      const wallMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x444444, // Darker gray for better contrast with the images
+        side: THREE.DoubleSide,
+        roughness: 0.8
+      });
       const wallMesh = new THREE.Mesh(wallGeometry, wallMaterial);
 
       // Position Wall opposite to TV (Flip the X axis)
-      wallMesh.position.set(-36.0, 33.0, 0);
-      wallMesh.lookAt(0, 36.0, 0); // Face towards the center
+      // Moved UP by 2 meters to avoid clipping with the 3rd floor or railings!
+      wallMesh.position.set(-36.0, 35.0, 0);
+      wallMesh.lookAt(0, 35.0, 0); // Face towards the center
       wallMesh.scale.set(0.3, 0.3, 0.3);
       scene.add(wallMesh);
 
@@ -771,8 +776,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
         textureLoader.load(url, (texture) => {
           texture.colorSpace = THREE.SRGBColorSpace;
           
-          // Make images smaller to fit perfectly in a 2x2 grid (board is 4.5m tall and 6.0m wide)
-          const aspect = texture.image.width / texture.image.height;
+          // Hardcode aspect ratio in case texture.image dimensions are not immediately available or wrong
+          const aspect = 16 / 9;
           const height = 1.5; // Scaled down to 1.5m tall
           const width = height * aspect; 
           
@@ -784,9 +789,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
           });
           
           const mesh = new THREE.Mesh(geometry, material);
-          // Base Y is 33.0 (center of board)
-          mesh.position.set(-35.8, 33.0 + yOffset, zOffset);
-          mesh.lookAt(0, 33.0 + yOffset, zOffset);
+          // Base Y is 35.0 (center of board)
+          mesh.position.set(-35.8, 35.0 + yOffset, zOffset);
+          mesh.lookAt(0, 35.0 + yOffset, zOffset);
           scene.add(mesh);
         });
       };
