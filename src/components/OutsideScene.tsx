@@ -320,6 +320,26 @@ export default function ARScene({ onExit }: ARSceneProps) {
     let terrainY = 0;
     loader.load('/models/outside-env-draco.glb', (gltf) => {
       envGroup = gltf.scene;
+      
+      // Fix tree leaves (alpha map issues)
+      envGroup.traverse((child: any) => {
+        if (child.isMesh && child.material) {
+          // If the material has a texture map, it's likely a leaf or decal that needs alpha cutout
+          if (child.material.map) {
+            child.material.transparent = false; // False is better for trees to avoid z-fighting
+            child.material.alphaTest = 0.5; // Cut out the white/transparent background
+            child.material.side = THREE.DoubleSide; // Render both sides of the leaf
+            
+            // Reset color to pure white so the texture colors show naturally
+            if (child.material.color) {
+               child.material.color.setHex(0xffffff);
+            }
+            
+            child.material.needsUpdate = true;
+          }
+        }
+      });
+
       envGroup.position.set(54.62, 0, 0); 
       scene.add(envGroup);
       envGroup.updateMatrixWorld(true);
