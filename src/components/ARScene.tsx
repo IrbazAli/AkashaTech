@@ -590,6 +590,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       avatarGroup.add(avatar);
       avatarGroup.position.set(50.0, 11.0, -2.0); // Spawning at Y=11.0 to match the physical ground floor mesh
       avatarGroup.scale.set(2, 2, 2);
+      if (window.__SPACESHIP_CACHE__) window.__SPACESHIP_CACHE__.guideOuterGroup = avatarGroup;
 
       avatarGroup.rotation.y = 0;
 
@@ -1133,7 +1134,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
       // Guide Walking Logic (Restored using X-axis Paw Path logic)
       const currentTargetNiche = nunTargetNicheRef.current;
-      const avatarGroup = window.__SPACESHIP_CACHE__?.guideGltf?.scene;
+      const avatarGroup = window.__SPACESHIP_CACHE__?.guideOuterGroup;
 
       if (currentTargetNiche && avatarGroup) {
         let targetPos = new THREE.Vector3();
@@ -1144,8 +1145,16 @@ export default function ARScene({ onExit }: ARSceneProps) {
         if (isReturning) {
           // Returning to original position
           if (guideOriginalPosRef.current) {
-            targetPos.copy(guideOriginalPosRef.current);
-            targetPos.y = avatarGroup.position.y;
+            const cornerPos = new THREE.Vector3(avatarGroup.position.x, avatarGroup.position.y, -2.0);
+            const finalPos = guideOriginalPosRef.current.clone();
+            finalPos.y = avatarGroup.position.y;
+            
+            // State-free L-Shape returning: check if Z has reached the hallway center
+            if (Math.abs(avatarGroup.position.z - cornerPos.z) > 0.2) {
+              targetPos.copy(cornerPos);
+            } else {
+              targetPos.copy(finalPos);
+            }
           }
         } else {
           // Walking to niche
@@ -1161,15 +1170,26 @@ export default function ARScene({ onExit }: ARSceneProps) {
               guideOriginalRotRef.current = avatarGroup.quaternion.clone();
             }
 
-            // Walk directly to the actual Niche's X and Z coordinates
-            targetPos.copy(nichePos);
-            targetPos.y = 11.0; // Strictly ground floor
+            // L-SHAPE NUN PATHING LOGIC
+            // Hallway center is at Z = -2.0. The corner is at the Niche's X coordinate.
+            const cornerPos = new THREE.Vector3(nichePos.x, avatarGroup.position.y, -2.0);
             
-            // Stop exactly 2.0 meters in front of the Niche to avoid clipping into the wall
-            const dir = new THREE.Vector3().subVectors(avatarGroup.position, targetPos);
-            dir.y = 0;
-            dir.normalize();
-            targetPos.add(dir.multiplyScalar(2.0));
+            // Final target is Niche's X and Z.
+            const finalPos = new THREE.Vector3(nichePos.x, avatarGroup.position.y, nichePos.z);
+            // Stop exactly 2.0 meters short to avoid clipping into the wall
+            const toFinalDir = new THREE.Vector3().subVectors(cornerPos, finalPos);
+            toFinalDir.y = 0;
+            toFinalDir.normalize();
+            if (toFinalDir.lengthSq() > 0) {
+                finalPos.add(toFinalDir.multiplyScalar(2.0));
+            }
+
+            // State-free L-Shape target: check if X has reached the niche's corridor position
+            if (Math.abs(avatarGroup.position.x - cornerPos.x) > 0.2) {
+              targetPos.copy(cornerPos);
+            } else {
+              targetPos.copy(finalPos);
+            }
           }
         }
 
@@ -1183,15 +1203,36 @@ export default function ARScene({ onExit }: ARSceneProps) {
           if (distance > 0.2) {
             // Face the target
             avatarGroup.lookAt(targetPos);
-            // Move towards target at normal walking speed (6.0 units/sec)
-            // Cap delta to 0.1s max to prevent massive jumps/teleportation during lag or Fast Refresh
+            // Move towards target at normal walking speed (4.0 units/sec)
+            // Cap delta to 0.1s max to prevent massive jumps/teleportation during lag
             const safeDelta = Math.min(delta, 0.1); 
-            const moveStep = Math.min(distance, 6.0 * safeDelta);
+            const moveStep = Math.min(distance, 4.0 * safeDelta);
             const moveDir = new THREE.Vector3().subVectors(targetPos, avatarGroup.position).normalize();
             moveDir.y = 0;
             moveDir.normalize();
 
             avatarGroup.position.addScaledVector(moveDir, moveStep);
+            
+            // --- NUN DYNAMIC GRAVITY RAYCASTER ---
+            const nunRaycaster = new THREE.Raycaster();
+            const downVector = new THREE.Vector3(0, -1, 0);
+            // Shoot from Y=14.0 to start BELOW the ceiling (which is at Y=19.14) but ABOVE the floor (Y=11.1)
+            nunRaycaster.set(new THREE.Vector3(avatarGroup.position.x, 14.0, avatarGroup.position.z), downVector);
+            const collidableObjects = [];
+            
+            if (window.__SPACESHIP_CACHE__ && window.__SPACESHIP_CACHE__.gltf) {
+                collidableObjects.push(window.__SPACESHIP_CACHE__.gltf.scene);
+            }
+            if (collidableObjects.length > 0) {
+                const hits = nunRaycaster.intersectObjects(collidableObjects, true);
+                const validFloor = hits.find(h => h.object.name && !h.object.name.toLowerCase().includes('glass') && !h.object.name.toLowerCase().includes('niche'));
+                if (validFloor) {
+                    avatarGroup.position.y = validFloor.point.y; // Snap exactly to the floor height
+                    if (Math.random() < 0.05) console.log(`[NUN WALK DEBUG] X: ${avatarGroup.position.x.toFixed(2)}, Z: ${avatarGroup.position.z.toFixed(2)} | Floor hit at Y: ${validFloor.point.y.toFixed(2)}`);
+                    if (Math.random() < 0.05) console.log(`[NUN WALK DEBUG] X: ${avatarGroup.position.x.toFixed(2)}, Z: ${avatarGroup.position.z.toFixed(2)} | Floor hit at Y: ${validFloor.point.y.toFixed(2)}`);
+                }
+            }
+
             targetAnimation = 'Walking';
             
             // Debug logs
@@ -1720,6 +1761,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
               <h3 style={{ margin: 0, textTransform: 'uppercase' }}>{data?.nicheNum || selectedNiche}</h3>
               <button onClick={() => {
                 setSelectedNiche(null);
+                setPawTargetNiche(null);
                 if (guideMode === 'nun') {
                   setNunTargetNiche('RETURN');
                 }
