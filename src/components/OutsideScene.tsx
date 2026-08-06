@@ -636,7 +636,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
         (window as any).DEBUG_BONE_LOGGED = true;
         const bones: string[] = [];
         avatar.traverse(c => { if ((c as any).isBone) bones.push(c.name); });
-        console.error('DEBUG BONES:', bones.slice(0, 5).join(', '));
+        
       }
       const avatarGroup = new THREE.Group();
       avatarGroup.add(avatar);
@@ -693,7 +693,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           }
           guideActionMap[clip.name] = action;
         });
-        console.log("Guide Action Map Populated! Keys:", Object.keys(guideActionMap));
+        
         if (window.__SPACESHIP_CACHE__) window.__SPACESHIP_CACHE__.guideActionMap = guideActionMap;
 
         const idleAnim = guideActionMap['Idle'] || guideActionMap[Object.keys(guideActionMap)[0]];
@@ -804,7 +804,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
             clip.name = 'Walking';
             if (!(window as any).DEBUG_ANIM_LOGGED) {
               (window as any).DEBUG_ANIM_LOGGED = true;
-              console.error('DEBUG ANIM TRACKS:', clip.tracks.slice(0, 5).map(t => t.name).join(', '));
+              
             }
             baseAnims.push(clip);
           });
@@ -1085,50 +1085,97 @@ export default function ARScene({ onExit }: ARSceneProps) {
           pawGroupRef.current = new THREE.Group();
           scene.add(pawGroupRef.current);
 
-          const startPos = camera.position.clone();
-          // Height strictly 0.1m above the floor height as requested
-          startPos.y = targetFloorYRef.current + 0.1;
+          const startPos = new THREE.Vector3(50.0, targetFloorYRef.current + 0.1, -2.0); // Start from Nun's Idle Position!
 
           const nichePos = new THREE.Vector3();
           const box = new THREE.Box3().setFromObject(targetMesh);
-          box.getCenter(nichePos);
+          box.getCenter(nichePos); const size = new THREE.Vector3(); box.getSize(size); console.log(`[NICHE DEBUG] Niche-name: ${targetMesh.name}, Center: ${nichePos.x}, ${nichePos.y}, ${nichePos.z} | Size: ${size.x}, ${size.y}, ${size.z}`);
 
-          // Draw the path straight down the hallway! 
-          // The spaceship's long corridor runs along the X axis. 
-          // Keep the player's starting Z coordinate (center of hallway), but stop at the Niche's X coordinate.
-          // This creates a perfectly straight line down the corridor that stops exactly adjacent to the Niche.
-          const targetPos = new THREE.Vector3(nichePos.x, startPos.y, startPos.z);
+                    // Draw an L-shaped path! First straight down the hallway, then turn to the wall.
+          const cornerPos = new THREE.Vector3(nichePos.x, startPos.y, startPos.z);
+          const targetPos = new THREE.Vector3(nichePos.x, startPos.y, nichePos.z);
+          console.log(`[PAW DEBUG - ${Date.now()}] Target Niche Position (Center): X=${nichePos.x.toFixed(3)}, Y=${nichePos.y.toFixed(3)}, Z=${nichePos.z.toFixed(3)}`);
 
-          const distance = startPos.distanceTo(targetPos);
-          const numPaws = Math.max(2, Math.floor(distance / 1.5)); // 1 paw every 1.5 meters
+          const dist1 = startPos.distanceTo(cornerPos);
+          const dist2 = cornerPos.distanceTo(targetPos);
+          const totalDist = dist1 + dist2;
+          
+          const numPaws = Math.max(2, Math.floor(totalDist / 1.5)); // 1 paw every 1.5 meters
+
+          // Create a raycaster to perfectly hug the floor height!
+          const pawRaycaster = new THREE.Raycaster();
+          const downVector = new THREE.Vector3(0, -1, 0);
 
           for (let i = 0; i <= numPaws; i++) {
             const pawClone = pawGltf.scene.clone();
 
             // Make the paw glow purple
-            pawClone.traverse((child: THREE.Object3D) => {
-              if ((child as THREE.Mesh).isMesh) {
-                const mesh = child as THREE.Mesh;
-                mesh.material = new THREE.MeshStandardMaterial({
-                  color: 0xa020f0, // purple
+            pawClone.traverse((child) => {
+              if (child.isMesh) {
+                child.material = new THREE.MeshStandardMaterial({
+                  color: 0xa020f0,
                   emissive: 0xa020f0,
                   emissiveIntensity: 2.0
                 });
               }
             });
 
-            const alpha = i / numPaws;
-            pawClone.position.lerpVectors(startPos, targetPos, alpha);
-            pawClone.lookAt(targetPos);
-            // Rotate 180 degrees
-            pawClone.rotateY(Math.PI);
-            // Rotate so it lies flat on the floor
-            pawClone.rotateX(-Math.PI / 2);
+            const currentDist = (i / numPaws) * totalDist;
+            let currentTarget;
+            
+            if (currentDist <= dist1) {
+              // On the first segment (hallway)
+              const alpha = dist1 === 0 ? 0 : currentDist / dist1;
+              pawClone.position.lerpVectors(startPos, cornerPos, alpha);
+              currentTarget = cornerPos;
+            } else {
+              // On the second segment (turning to the wall)
+              const alpha = dist2 === 0 ? 0 : (currentDist - dist1) / dist2;
+              pawClone.position.lerpVectors(cornerPos, targetPos, alpha);
+              currentTarget = targetPos;
+            }
 
-            // Scale down drastically to make them look like a trail (bird size)
+            // Look exactly along the segment it is currently on
+            if (currentDist <= dist1 && dist1 > 0.01) {
+              pawClone.lookAt(cornerPos);
+            } else if (currentDist > dist1 && dist2 > 0.01) {
+              pawClone.lookAt(targetPos);
+            } else {
+              pawClone.lookAt(targetPos);
+            }
+            
+            // Adjust paw rotations correctly
+            pawClone.rotateY(Math.PI);
+            pawClone.rotateX(-Math.PI / 2);
             pawClone.scale.set(0.005, 0.005, 0.005);
+            
+            // --- DYNAMIC FLOOR HEIGHT SNAP ---
+            // Raycast straight down from JUST above the interior floor (startPos.y + 3.0) 
+            // so we don't hit the spaceship's roof! This perfectly mimics the player's gravity.
+            pawRaycaster.set(new THREE.Vector3(pawClone.position.x, startPos.y + 3.0, pawClone.position.z), downVector);
+            const collidableObjects = [];
+            
+            // In OutsideScene, spaceshipGroup might be accessible via the cache
+            if (window.__SPACESHIP_CACHE__ && window.__SPACESHIP_CACHE__.gltf) {
+                collidableObjects.push(window.__SPACESHIP_CACHE__.gltf.scene);
+            }
+            
+            if (collidableObjects.length > 0) {
+                const hits = pawRaycaster.intersectObjects(collidableObjects, true);
+                // We want a solid floor hit.
+                const validFloor = hits.find(h => h.object.name && !h.object.name.toLowerCase().includes('glass') && !h.object.name.toLowerCase().includes('niche'));
+                if (validFloor) {
+                    pawClone.position.y = validFloor.point.y + 0.1; // Place perfectly 0.1m above the physical floor!
+                } else {
+                    // Fallback to startPos.y if raycast completely misses
+                    pawClone.position.y = startPos.y; 
+                }
+            } else {
+                pawClone.position.y = startPos.y;
+            }
 
             pawGroupRef.current.add(pawClone);
+            console.log(`[PAW DEBUG - ${Date.now()}] Paw ${i}/${numPaws} placed at X=${pawClone.position.x.toFixed(3)}, Y=${pawClone.position.y.toFixed(3)}, Z=${pawClone.position.z.toFixed(3)}`);
           }
 
           lastPawTargetRef.current = currentPawTarget;
@@ -1203,7 +1250,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
             targetAnimation = 'Walking';
             
             // Debug logs
-            console.log(`[NunWalk] PosX: ${avatarGroup.position.x.toFixed(2)}, TargetX: ${targetPos.x.toFixed(2)}, Dist: ${distance.toFixed(2)}`);
+            
           } else {
             // Reached destination
             if (isReturning) {
@@ -1383,12 +1430,12 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
           // DEBUG: Throttle log every ~1 sec (60 frames) to check greeting logic
           if (!(window as any)._LOGGED_GREETING && Math.random() < 0.02) {
-            console.error(`DEBUG GREETING: CamX=${camera.position.x.toFixed(2)}, NunX=${nunPos.x.toFixed(2)}, DistToNun=${distToNun.toFixed(2)}`);
+            
           }
 
           // Trigger Nun Greeting ONLY when they are within 5.0m of the Nun (Plays exactly once)
           if (distToNun < 5.0 && !hasGreetedRef.current) {
-            console.error("DEBUG: NUN GREETING TRIGGERED! User is within 5.0m of the Nun!");
+            
             (window as any)._LOGGED_GREETING = true;
             hasGreetedRef.current = true;
             const audio = playAudioWithLipSync('/audio/greeting.mp3');
