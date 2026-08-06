@@ -1332,7 +1332,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           const toCam = new THREE.Vector3().subVectors(camera.position, headPos).normalize();
 
           // Only track if camera is in front of avatar (dot > 0 = within 180 degree cone)
-          if (avatarForward.dot(toCam) > 0) {
+          if (avatarForward.dot(toCam) > 0 && window.__SPACESHIP_CACHE__?.guideCurrentAction !== 'Walking') {
             head.lookAt(camera.position);
           }
         }
