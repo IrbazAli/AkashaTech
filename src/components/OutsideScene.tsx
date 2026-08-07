@@ -362,6 +362,100 @@ export default function ARScene({ onExit }: ARSceneProps) {
         spaceshipGroup.updateMatrixWorld(true);
       }
       
+      // Load Statue and Tree 200 units away to improve FPS in main area
+      loader.load('/models/statue.glb', (statueGltf) => {
+        const statue = statueGltf.scene;
+        const box = new THREE.Box3().setFromObject(statue);
+        const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
+        const scale = 25.0 / maxDim; // 25 meters
+        statue.scale.set(scale, scale, scale);
+        
+        // Raycast to find exact ground height
+        const raycaster = new THREE.Raycaster();
+        raycaster.set(new THREE.Vector3(20.0, 500.0, 200.0), new THREE.Vector3(0, -1, 0));
+        let groundY = 0;
+        if (envGroup) {
+            const intersects = raycaster.intersectObject(envGroup, true);
+            if (intersects.length > 0) {
+                groundY = intersects[0].point.y;
+            }
+        }
+        
+        // Offset by model's bounding box minimum Y so it doesn't sink or float
+        const newBox = new THREE.Box3().setFromObject(statue);
+        const bottomOffset = newBox.min.y - statue.position.y;
+        
+        statue.position.set(20.0, groundY - bottomOffset, 200.0);
+        scene.add(statue);
+      });
+
+      // Load grass fountain first
+      // Load grass fountain first
+      loader.load('/models/grass-fountain.glb', (fountainGltf) => {
+         const fountain = fountainGltf.scene;
+         
+         const fBox = new THREE.Box3().setFromObject(fountain);
+         const fSize = Math.max(fBox.getSize(new THREE.Vector3()).x, 1);
+         // Scale fountain up a bit more to fit the massive tree
+         const fScale = 35.0 / fSize;
+         fountain.scale.set(fScale, fScale, fScale);
+         
+         // Raycast for tree/fountain location
+         const raycaster = new THREE.Raycaster();
+         raycaster.set(new THREE.Vector3(80.0, 500.0, 200.0), new THREE.Vector3(0, -1, 0));
+         let groundY = 0;
+         if (envGroup) {
+             const intersects = raycaster.intersectObject(envGroup, true);
+             if (intersects.length > 0) {
+                 groundY = intersects[0].point.y;
+             }
+         }
+         
+         const newFBox = new THREE.Box3().setFromObject(fountain);
+         const bottomOffset = newFBox.min.y - fountain.position.y;
+         
+         fountain.position.set(80.0, groundY - bottomOffset, 200.0);
+         
+         // Make grass green inside the fountain, leave marble alone
+         fountain.traverse((child) => {
+             if (child.isMesh && child.material) {
+                 const name = child.name.toLowerCase();
+                 const matName = child.material.name ? child.material.name.toLowerCase() : '';
+                 if (name.includes('grass') || matName.includes('grass') || name.includes('plane') || name.includes('ground') || name.includes('dirt')) {
+                     // Make it a dark olive/muddy green to match the terrain
+                     child.material = child.material.clone();
+                     child.material.color.setHex(0x3e4a30); // Dark olive green
+                 }
+             }
+         });
+         
+         scene.add(fountain);
+         
+         // Load tree inside it
+         loader.load('/models/tree.glb', (treeGltf) => {
+            const tree = treeGltf.scene;
+            tree.traverse((child) => {
+              if (child.isMesh && child.material && child.material.map) {
+                child.material.transparent = false;
+                child.material.alphaTest = 0.5;
+                child.material.side = THREE.DoubleSide;
+                if (child.material.color) child.material.color.setHex(0xffffff);
+                child.material.needsUpdate = true;
+              }
+            });
+            
+            const box = new THREE.Box3().setFromObject(tree);
+            const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
+            const scale = 75.0 / maxDim; // 75 meters tall!
+            tree.scale.set(scale, scale, scale);
+            
+            // Just copy the exact Y position of the fountain so it is perfectly grounded inside it!
+            // Do not use bottomOffset for the tree because its bounding box calculation might be skewed by leaves extending downwards.
+            tree.position.copy(fountain.position);
+            scene.add(tree);
+          });
+      });
+      
       
       
       // Safely calculate terrain height exactly where we spawn!
@@ -709,9 +803,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
         mixer = new THREE.AnimationMixer(avatar);
         guideAnimationsData.forEach((clip: THREE.AnimationClip) => {
           const action = mixer!.clipAction(clip);
-          if (clip.name === 'Talking_0') {
-            action.timeScale = 1.3;
-          }
+          action.timeScale = 1.8; // Match wife's speed
           guideActionMap[clip.name] = action;
         });
         

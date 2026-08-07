@@ -17,12 +17,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <Script src="https://cdn.jsdelivr.net/npm/eruda" strategy="beforeInteractive" />
-        <Script id="eruda-init" strategy="afterInteractive">
-          {`eruda.init();`}
-        </Script>
       </head>
       <body>
+        <Script src="https://cdn.jsdelivr.net/npm/eruda" />
+        <Script id="eruda-init">
+          {`eruda.init();`}
+        </Script>
         <Providers>
           <AuthUI />
           {children}
