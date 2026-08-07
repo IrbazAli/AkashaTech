@@ -320,7 +320,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
     let terrainY = 0;
     loader.load('/models/outside-env-draco.glb', (gltf) => {
       envGroup = gltf.scene;
-      
+
       // Fix tree leaves (alpha map issues)
       envGroup.traverse((child: any) => {
         if (child.isMesh && child.material) {
@@ -329,25 +329,25 @@ export default function ARScene({ onExit }: ARSceneProps) {
             child.material.transparent = false; // False is better for trees to avoid z-fighting
             child.material.alphaTest = 0.5; // Cut out the white/transparent background
             child.material.side = THREE.DoubleSide; // Render both sides of the leaf
-            
+
             // Reset color to pure white so the texture colors show naturally
             if (child.material.color) {
-               child.material.color.setHex(0xffffff);
+              child.material.color.setHex(0xffffff);
             }
-            
+
             child.material.needsUpdate = true;
           }
         }
       });
 
-      envGroup.position.set(54.62, 0, 0); 
+      envGroup.position.set(54.62, 0, 0);
       scene.add(envGroup);
       envGroup.updateMatrixWorld(true);
 
       const raycaster = new THREE.Raycaster();
       raycaster.set(new THREE.Vector3(54.62, 500, 0), new THREE.Vector3(0, -1, 0));
       const intersects = raycaster.intersectObject(envGroup, true);
-      
+
       if (intersects.length > 0) {
         terrainY = intersects[0].point.y;
       }
@@ -356,12 +356,12 @@ export default function ARScene({ onExit }: ARSceneProps) {
       // We need the terrain to be at Y=2.8 relative to the spaceship.
       envGroup.position.set(54.62, 2.8 - terrainY, 0);
       envGroup.updateMatrixWorld(true);
-      
+
       if (spaceshipGroup) {
         spaceshipGroup.position.set(54.62, 0, 0); // Keep spaceship rigidly at original Y=0
         spaceshipGroup.updateMatrixWorld(true);
       }
-      
+
       // Load Statue and Tree 200 units away to improve FPS in main area
       loader.load('/models/statue.glb', (statueGltf) => {
         const statue = statueGltf.scene;
@@ -369,95 +369,95 @@ export default function ARScene({ onExit }: ARSceneProps) {
         const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
         const scale = 25.0 / maxDim; // 25 meters
         statue.scale.set(scale, scale, scale);
-        
+
         // Raycast to find exact ground height
         const raycaster = new THREE.Raycaster();
-        raycaster.set(new THREE.Vector3(20.0, 500.0, 200.0), new THREE.Vector3(0, -1, 0));
+        raycaster.set(new THREE.Vector3(180.0, 500.0, -25.0), new THREE.Vector3(0, -1, 0));
         let groundY = 0;
         if (envGroup) {
-            const intersects = raycaster.intersectObject(envGroup, true);
-            if (intersects.length > 0) {
-                groundY = intersects[0].point.y;
-            }
+          const intersects = raycaster.intersectObject(envGroup, true);
+          if (intersects.length > 0) {
+            groundY = intersects[0].point.y;
+          }
         }
-        
+
         // Offset by model's bounding box minimum Y so it doesn't sink or float
         const newBox = new THREE.Box3().setFromObject(statue);
         const bottomOffset = newBox.min.y - statue.position.y;
-        
-        statue.position.set(20.0, groundY - bottomOffset, 200.0);
+
+        statue.position.set(180.0, groundY - bottomOffset, 0.0);
         scene.add(statue);
       });
 
       // Load grass fountain first
       // Load grass fountain first
       loader.load('/models/grass-fountain.glb', (fountainGltf) => {
-         const fountain = fountainGltf.scene;
-         
-         const fBox = new THREE.Box3().setFromObject(fountain);
-         const fSize = Math.max(fBox.getSize(new THREE.Vector3()).x, 1);
-         // Scale fountain up a bit more to fit the massive tree
-         const fScale = 35.0 / fSize;
-         fountain.scale.set(fScale, fScale, fScale);
-         
-         // Raycast for tree/fountain location
-         const raycaster = new THREE.Raycaster();
-         raycaster.set(new THREE.Vector3(80.0, 500.0, 200.0), new THREE.Vector3(0, -1, 0));
-         let groundY = 0;
-         if (envGroup) {
-             const intersects = raycaster.intersectObject(envGroup, true);
-             if (intersects.length > 0) {
-                 groundY = intersects[0].point.y;
-             }
-         }
-         
-         const newFBox = new THREE.Box3().setFromObject(fountain);
-         const bottomOffset = newFBox.min.y - fountain.position.y;
-         
-         fountain.position.set(80.0, groundY - bottomOffset, 200.0);
-         
-         // Make grass green inside the fountain, leave marble alone
-         fountain.traverse((child) => {
-             if (child.isMesh && child.material) {
-                 const name = child.name.toLowerCase();
-                 const matName = child.material.name ? child.material.name.toLowerCase() : '';
-                 if (name.includes('grass') || matName.includes('grass') || name.includes('plane') || name.includes('ground') || name.includes('dirt')) {
-                     // Make it a dark olive/muddy green to match the terrain
-                     child.material = child.material.clone();
-                     child.material.color.setHex(0x3e4a30); // Dark olive green
-                 }
-             }
-         });
-         
-         scene.add(fountain);
-         
-         // Load tree inside it
-         loader.load('/models/tree.glb', (treeGltf) => {
-            const tree = treeGltf.scene;
-            tree.traverse((child) => {
-              if (child.isMesh && child.material && child.material.map) {
-                child.material.transparent = false;
-                child.material.alphaTest = 0.5;
-                child.material.side = THREE.DoubleSide;
-                if (child.material.color) child.material.color.setHex(0xffffff);
-                child.material.needsUpdate = true;
-              }
-            });
-            
-            const box = new THREE.Box3().setFromObject(tree);
-            const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
-            const scale = 75.0 / maxDim; // 75 meters tall!
-            tree.scale.set(scale, scale, scale);
-            
-            // Just copy the exact Y position of the fountain so it is perfectly grounded inside it!
-            // Do not use bottomOffset for the tree because its bounding box calculation might be skewed by leaves extending downwards.
-            tree.position.copy(fountain.position);
-            scene.add(tree);
+        const fountain = fountainGltf.scene;
+
+        const fBox = new THREE.Box3().setFromObject(fountain);
+        const fSize = Math.max(fBox.getSize(new THREE.Vector3()).x, 1);
+        // Scale fountain up a bit more to fit the massive tree
+        const fScale = 35.0 / fSize;
+        fountain.scale.set(fScale, fScale, fScale);
+
+        // Raycast for tree/fountain location
+        const raycaster = new THREE.Raycaster();
+        raycaster.set(new THREE.Vector3(250.0, 500.0, 0.0), new THREE.Vector3(0, -1, 0));
+        let groundY = 0;
+        if (envGroup) {
+          const intersects = raycaster.intersectObject(envGroup, true);
+          if (intersects.length > 0) {
+            groundY = intersects[0].point.y;
+          }
+        }
+
+        const newFBox = new THREE.Box3().setFromObject(fountain);
+        const bottomOffset = newFBox.min.y - fountain.position.y;
+
+        fountain.position.set(250.0, groundY - bottomOffset, 0.0);
+
+        // Make grass green inside the fountain, leave marble alone
+        fountain.traverse((child) => {
+          if (child.isMesh && child.material) {
+            const name = child.name.toLowerCase();
+            const matName = child.material.name ? child.material.name.toLowerCase() : '';
+            if (name.includes('grass') || matName.includes('grass') || name.includes('plane') || name.includes('ground') || name.includes('dirt')) {
+              // Make it a dark olive/muddy green to match the terrain
+              child.material = child.material.clone();
+              child.material.color.setHex(0x3e4a30); // Dark olive green
+            }
+          }
+        });
+
+        scene.add(fountain);
+
+        // Load tree inside it
+        loader.load('/models/tree.glb', (treeGltf) => {
+          const tree = treeGltf.scene;
+          tree.traverse((child) => {
+            if (child.isMesh && child.material && child.material.map) {
+              child.material.transparent = false;
+              child.material.alphaTest = 0.5;
+              child.material.side = THREE.DoubleSide;
+              if (child.material.color) child.material.color.setHex(0xffffff);
+              child.material.needsUpdate = true;
+            }
           });
+
+          const box = new THREE.Box3().setFromObject(tree);
+          const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
+          const scale = 75.0 / maxDim; // 75 meters tall!
+          tree.scale.set(scale, scale, scale);
+
+          // Just copy the exact Y position of the fountain so it is perfectly grounded inside it!
+          // Do not use bottomOffset for the tree because its bounding box calculation might be skewed by leaves extending downwards.
+          tree.position.copy(fountain.position);
+          scene.add(tree);
+        });
       });
-      
-      
-      
+
+
+
       // Safely calculate terrain height exactly where we spawn!
       const spawnRaycaster = new THREE.Raycaster();
       spawnRaycaster.set(new THREE.Vector3(120.0, 500.0, 40.0), new THREE.Vector3(0, -1, 0));
@@ -469,7 +469,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       } else {
         console.error('[SPAWN DEBUG] NO TERRAIN FOUND at X: 120, Z: 40! Falling into the abyss!');
       }
-      
+
       playerCollider.start.set(120.0, spawnY + 2.0, 40.0);
 
       playerCollider.end.set(120.0, spawnY + 3.0, 40.0);
@@ -750,7 +750,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
         (window as any).DEBUG_BONE_LOGGED = true;
         const bones: string[] = [];
         avatar.traverse(c => { if ((c as any).isBone) bones.push(c.name); });
-        
+
       }
       const avatarGroup = new THREE.Group();
       avatarGroup.add(avatar);
@@ -806,7 +806,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           action.timeScale = 1.8; // Match wife's speed
           guideActionMap[clip.name] = action;
         });
-        
+
         if (window.__SPACESHIP_CACHE__) window.__SPACESHIP_CACHE__.guideActionMap = guideActionMap;
 
         const idleAnim = guideActionMap['Idle'] || guideActionMap[Object.keys(guideActionMap)[0]];
@@ -843,7 +843,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
       // 2. Create Wall on the opposite side of the spaceship (X = 43)
       const wallGeometry = new THREE.BoxGeometry(20, 15, 1);
-      const wallMaterial = new THREE.MeshStandardMaterial({ 
+      const wallMaterial = new THREE.MeshStandardMaterial({
         color: 0x444444, // Darker gray for better contrast with the images
         side: THREE.DoubleSide,
         roughness: 0.8
@@ -863,23 +863,23 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
       // 1. Load Images (Tree, Stepping Stones, Statue) onto the Board (X = -36.0)
       const textureLoader = new THREE.TextureLoader();
-      
+
       const loadBoardImage = (url: string, yOffset: number, zOffset: number) => {
         textureLoader.load(url, (texture) => {
           texture.colorSpace = THREE.SRGBColorSpace;
-          
+
           // Hardcode aspect ratio in case texture.image dimensions are not immediately available or wrong
           const aspect = 16 / 9;
           const height = 1.5; // Scaled down to 1.5m tall
-          const width = height * aspect; 
-          
+          const width = height * aspect;
+
           const geometry = new THREE.PlaneGeometry(width, height);
-          const material = new THREE.MeshBasicMaterial({ 
-            map: texture, 
+          const material = new THREE.MeshBasicMaterial({
+            map: texture,
             transparent: true,
             side: THREE.DoubleSide
           });
-          
+
           const mesh = new THREE.Mesh(geometry, material);
           // Base Y is 35.0 (center of board)
           mesh.position.set(-35.8, 35.0 + yOffset, zOffset);
@@ -922,7 +922,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
             clip.name = 'Walking';
             if (!(window as any).DEBUG_ANIM_LOGGED) {
               (window as any).DEBUG_ANIM_LOGGED = true;
-              
+
             }
             baseAnims.push(clip);
           });
@@ -1098,7 +1098,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
       if (validFloorHit && validFloorHit.distance < 3.5) {
         playerOnFloor = true;
-        
+
         let isOnSpaceship = false;
         if (spaceshipGroup) {
           let parent = validFloorHit.object;
@@ -1123,12 +1123,12 @@ export default function ARScene({ onExit }: ARSceneProps) {
         collisionOccurred = true;
         // If the normal is horizontal (wall) or ceiling, or if we weren't on the floor
         if (result.normal.y <= 0.1 || !playerOnFloor) {
-            playerCollider.translate(result.normal.multiplyScalar(result.depth));
+          playerCollider.translate(result.normal.multiplyScalar(result.depth));
         }
         // If we hit a wall, stop velocity
         if (Math.abs(result.normal.y) <= 0.1) {
-            playerVelocity.x = 0;
-            playerVelocity.z = 0;
+          playerVelocity.x = 0;
+          playerVelocity.z = 0;
         }
       }
 
@@ -1209,7 +1209,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           const box = new THREE.Box3().setFromObject(targetMesh);
           box.getCenter(nichePos); const size = new THREE.Vector3(); box.getSize(size); console.log(`[NICHE DEBUG] Niche-name: ${targetMesh.name}, Center: ${nichePos.x}, ${nichePos.y}, ${nichePos.z} | Size: ${size.x}, ${size.y}, ${size.z}`);
 
-                    // Draw an L-shaped path! First straight down the hallway, then turn to the wall.
+          // Draw an L-shaped path! First straight down the hallway, then turn to the wall.
           const cornerPos = new THREE.Vector3(nichePos.x, startPos.y, startPos.z);
           const targetPos = new THREE.Vector3(nichePos.x, startPos.y, nichePos.z);
           console.log(`[PAW DEBUG - ${Date.now()}] Target Niche Position (Center): X=${nichePos.x.toFixed(3)}, Y=${nichePos.y.toFixed(3)}, Z=${nichePos.z.toFixed(3)}`);
@@ -1217,7 +1217,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           const dist1 = startPos.distanceTo(cornerPos);
           const dist2 = cornerPos.distanceTo(targetPos);
           const totalDist = dist1 + dist2;
-          
+
           const numPaws = Math.max(2, Math.floor(totalDist / 1.5)); // 1 paw every 1.5 meters
 
           // Create a raycaster to perfectly hug the floor height!
@@ -1240,7 +1240,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
             const currentDist = (i / numPaws) * totalDist;
             let currentTarget;
-            
+
             if (currentDist <= dist1) {
               // On the first segment (hallway)
               const alpha = dist1 === 0 ? 0 : currentDist / dist1;
@@ -1261,35 +1261,35 @@ export default function ARScene({ onExit }: ARSceneProps) {
             } else {
               pawClone.lookAt(targetPos);
             }
-            
+
             // Adjust paw rotations correctly
             pawClone.rotateY(Math.PI);
             pawClone.rotateX(-Math.PI / 2);
             pawClone.scale.set(0.005, 0.005, 0.005);
-            
+
             // --- DYNAMIC FLOOR HEIGHT SNAP ---
             // Raycast straight down from JUST above the interior floor (startPos.y + 3.0) 
             // so we don't hit the spaceship's roof! This perfectly mimics the player's gravity.
             pawRaycaster.set(new THREE.Vector3(pawClone.position.x, startPos.y + 3.0, pawClone.position.z), downVector);
             const collidableObjects = [];
-            
+
             // In OutsideScene, spaceshipGroup might be accessible via the cache
             if (window.__SPACESHIP_CACHE__ && window.__SPACESHIP_CACHE__.gltf) {
-                collidableObjects.push(window.__SPACESHIP_CACHE__.gltf.scene);
+              collidableObjects.push(window.__SPACESHIP_CACHE__.gltf.scene);
             }
-            
+
             if (collidableObjects.length > 0) {
-                const hits = pawRaycaster.intersectObjects(collidableObjects, true);
-                // We want a solid floor hit.
-                const validFloor = hits.find(h => h.object.name && !h.object.name.toLowerCase().includes('glass') && !h.object.name.toLowerCase().includes('niche'));
-                if (validFloor) {
-                    pawClone.position.y = validFloor.point.y + 0.1; // Place perfectly 0.1m above the physical floor!
-                } else {
-                    // Fallback to startPos.y if raycast completely misses
-                    pawClone.position.y = startPos.y; 
-                }
-            } else {
+              const hits = pawRaycaster.intersectObjects(collidableObjects, true);
+              // We want a solid floor hit.
+              const validFloor = hits.find(h => h.object.name && !h.object.name.toLowerCase().includes('glass') && !h.object.name.toLowerCase().includes('niche'));
+              if (validFloor) {
+                pawClone.position.y = validFloor.point.y + 0.1; // Place perfectly 0.1m above the physical floor!
+              } else {
+                // Fallback to startPos.y if raycast completely misses
                 pawClone.position.y = startPos.y;
+              }
+            } else {
+              pawClone.position.y = startPos.y;
             }
 
             pawGroupRef.current.add(pawClone);
@@ -1320,7 +1320,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
             const cornerPos = new THREE.Vector3(avatarGroup.position.x, avatarGroup.position.y, -2.0);
             const finalPos = guideOriginalPosRef.current.clone();
             finalPos.y = avatarGroup.position.y;
-            
+
             // State-free L-Shape returning: check if Z has reached the hallway center
             if (Math.abs(avatarGroup.position.z - cornerPos.z) > 0.2) {
               targetPos.copy(cornerPos);
@@ -1345,7 +1345,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
             // L-SHAPE NUN PATHING LOGIC
             // Hallway center is at Z = -2.0. The corner is at the Niche's X coordinate.
             const cornerPos = new THREE.Vector3(nichePos.x, avatarGroup.position.y, -2.0);
-            
+
             // Final target is Niche's X and Z.
             const finalPos = new THREE.Vector3(nichePos.x, avatarGroup.position.y, nichePos.z);
             // Stop exactly 2.0 meters short to avoid clipping into the wall
@@ -1353,7 +1353,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
             toFinalDir.y = 0;
             toFinalDir.normalize();
             if (toFinalDir.lengthSq() > 0) {
-                finalPos.add(toFinalDir.multiplyScalar(2.0));
+              finalPos.add(toFinalDir.multiplyScalar(2.0));
             }
 
             // State-free L-Shape target: check if X has reached the niche's corridor position
@@ -1371,43 +1371,43 @@ export default function ARScene({ onExit }: ARSceneProps) {
           const posXZ = new THREE.Vector3(avatarGroup.position.x, 0, avatarGroup.position.z);
           const targetXZ = new THREE.Vector3(targetPos.x, 0, targetPos.z);
           const distance = posXZ.distanceTo(targetXZ);
-          
+
           if (distance > 0.2) {
             // Face the target
             avatarGroup.lookAt(targetPos);
             // Move towards target at normal walking speed (4.0 units/sec)
             // Cap delta to 0.1s max to prevent massive jumps/teleportation during lag
-            const safeDelta = Math.min(delta, 0.1); 
+            const safeDelta = Math.min(delta, 0.1);
             const moveStep = Math.min(distance, 4.0 * safeDelta);
             const moveDir = new THREE.Vector3().subVectors(targetPos, avatarGroup.position).normalize();
             moveDir.y = 0;
             moveDir.normalize();
 
             avatarGroup.position.addScaledVector(moveDir, moveStep);
-            
+
             // --- NUN DYNAMIC GRAVITY RAYCASTER ---
             const nunRaycaster = new THREE.Raycaster();
             const downVector = new THREE.Vector3(0, -1, 0);
             // Shoot from Y=14.0 to start BELOW the ceiling (which is at Y=19.14) but ABOVE the floor (Y=11.1)
             nunRaycaster.set(new THREE.Vector3(avatarGroup.position.x, 14.0, avatarGroup.position.z), downVector);
             const collidableObjects = [];
-            
+
             if (window.__SPACESHIP_CACHE__ && window.__SPACESHIP_CACHE__.gltf) {
-                collidableObjects.push(window.__SPACESHIP_CACHE__.gltf.scene);
+              collidableObjects.push(window.__SPACESHIP_CACHE__.gltf.scene);
             }
             if (collidableObjects.length > 0) {
-                const hits = nunRaycaster.intersectObjects(collidableObjects, true);
-                const validFloor = hits.find(h => h.object.name && !h.object.name.toLowerCase().includes('glass') && !h.object.name.toLowerCase().includes('niche'));
-                if (validFloor) {
-                    avatarGroup.position.y = validFloor.point.y; // Snap exactly to the floor height
-                    if (Math.random() < 0.05) console.log(`[NUN WALK DEBUG] X: ${avatarGroup.position.x.toFixed(2)}, Z: ${avatarGroup.position.z.toFixed(2)} | Floor hit at Y: ${validFloor.point.y.toFixed(2)}`);
-                }
+              const hits = nunRaycaster.intersectObjects(collidableObjects, true);
+              const validFloor = hits.find(h => h.object.name && !h.object.name.toLowerCase().includes('glass') && !h.object.name.toLowerCase().includes('niche'));
+              if (validFloor) {
+                avatarGroup.position.y = validFloor.point.y; // Snap exactly to the floor height
+                if (Math.random() < 0.05) console.log(`[NUN WALK DEBUG] X: ${avatarGroup.position.x.toFixed(2)}, Z: ${avatarGroup.position.z.toFixed(2)} | Floor hit at Y: ${validFloor.point.y.toFixed(2)}`);
+              }
             }
 
             targetAnimation = 'Walking';
-            
+
             // Debug logs
-            
+
           } else {
             // Reached destination
             if (isReturning) {
@@ -1587,12 +1587,12 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
           // DEBUG: Throttle log every ~1 sec (60 frames) to check greeting logic
           if (!(window as any)._LOGGED_GREETING && Math.random() < 0.02) {
-            
+
           }
 
           // Trigger Nun Greeting ONLY when they are within 5.0m of the Nun (Plays exactly once)
           if (distToNun < 5.0 && !hasGreetedRef.current) {
-            
+
             (window as any)._LOGGED_GREETING = true;
             hasGreetedRef.current = true;
             const audio = playAudioWithLipSync('/audio/greeting.mp3');
