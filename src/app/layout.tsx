@@ -21,7 +21,14 @@ export default function RootLayout({
       <body>
         <Script src="https://cdn.jsdelivr.net/npm/eruda" />
         <Script id="eruda-init">
-          {`eruda.init();`}
+          {`
+            let checkEruda = setInterval(() => {
+              if (typeof eruda !== 'undefined') {
+                eruda.init();
+                clearInterval(checkEruda);
+              }
+            }, 100);
+          `}
         </Script>
         <Providers>
           <AuthUI />

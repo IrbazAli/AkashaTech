@@ -16,7 +16,7 @@ import { Octree } from 'three/examples/jsm/math/Octree.js';
 // @ts-ignore
 import { Capsule } from 'three/examples/jsm/math/Capsule.js';
 import { Lipsync } from 'wawa-lipsync';
-import { DUMMY_PEOPLE } from '../data/dummyData';
+import { DUMMY_PEOPLE, DUMMY_DIAMOND_SLOTS } from '../data/dummyData';
 
 // @ts-ignore
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -1046,7 +1046,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       // Filter out ceiling/environment if raycasting hits non-interactable meshes
       const interactiveIntersects = intersects.filter(i => {
         const name = i.object.name.toLowerCase();
-        if (name.includes('room') || name.includes('gate') || name.includes('niche')) return true;
+        if (name.includes('room') || name.includes('gate') || name.includes('niche') || name.includes('diamond') || name.includes('heart')) return true;
         
         let isNft = false;
         i.object.traverseAncestors((ancestor) => {
@@ -1096,13 +1096,14 @@ export default function ARScene({ onExit }: ARSceneProps) {
           controls.unlock();
           setShowNunDialog(true);
           setSearchPrompt(false);
-        } else if (nodeName.includes('room') && !nodeName.includes('main')) {
+        } else if ((nodeName.includes('room') && !nodeName.includes('main')) || nodeName.includes('diamond') || nodeName.includes('heart')) {
           // Remove the strict distance check, as the niche's origin might be far away from its actual visual mesh
           setSelectedNiche(object.name);
 
           // Change color to cyan (selected) only if it is AVAILABLE (not occupied/reserved)
           const nicheData = occupiedMapRef.current[object.name];
-          if (nicheData && nicheData.status === 'available' && object.material) {
+          const isPremiumShape = object.name.toLowerCase().includes('diamond') || object.name.toLowerCase().includes('heart');
+          if ((isPremiumShape || (nicheData && nicheData.status === 'available')) && object.material) {
             const mat = object.material as THREE.MeshStandardMaterial;
             const newMat = mat.clone();
             newMat.emissive = new THREE.Color(0x00ffff); // Cyan to indicate selection
@@ -1997,7 +1998,30 @@ export default function ARScene({ onExit }: ARSceneProps) {
               }} style={{ background: 'none', border: 'none', color: color, cursor: 'pointer', fontSize: '1.2rem' }}>X</button>
             </div>
 
-            {data ? (
+            {selectedNiche.toLowerCase().includes('diamond') || selectedNiche.toLowerCase().includes('heart') ? (
+              <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '10px' }}>
+                <p style={{ color: '#fff', margin: '0 0 10px 0', fontSize: '1.2rem', fontWeight: 'bold', borderBottom: '1px solid #ffaa00', paddingBottom: '5px' }}>
+                  Premium Shape Package (10 Slots)
+                </p>
+                {DUMMY_DIAMOND_SLOTS.map((slot, idx) => (
+                  <div key={idx} style={{ marginBottom: '15px', padding: '10px', backgroundColor: slot.status === 'available' ? 'rgba(51, 255, 85, 0.1)' : 'rgba(255, 0, 0, 0.1)', borderLeft: `3px solid ${slot.status === 'available' ? '#33ff55' : '#ff4444'}` }}>
+                    <h4 style={{ margin: '0 0 5px 0', color: slot.status === 'available' ? '#33ff55' : '#ff4444' }}>{slot.nicheNum}</h4>
+                    {slot.status === 'available' ? (
+                      <div>
+                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#eee' }}>Available for purchase</p>
+                        <button style={{ marginTop: '10px', padding: '5px 10px', backgroundColor: 'transparent', color: '#33ff55', border: '1px solid #33ff55', cursor: 'pointer' }}>Buy Slot</button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p style={{ margin: 0, fontWeight: 'bold', color: '#fff' }}>{slot.name}</p>
+                        <p style={{ margin: '3px 0', fontSize: '0.8rem', color: '#ccc' }}>{slot.dob} - {slot.dod}</p>
+                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#aaa', fontStyle: 'italic' }}>"{slot.message}"</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : data ? (
               <div>
                 <p style={{ color: '#fff', margin: '0 0 10px 0', fontSize: '1.2rem', fontWeight: 'bold' }}>{data.name}</p>
                 {isSold && (
@@ -2024,48 +2048,21 @@ export default function ARScene({ onExit }: ARSceneProps) {
                         const res = await fetch("/api/checkout", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ shapeId: data.nicheNum || selectedNiche })
+                          body: JSON.stringify({ nicheId: selectedNiche })
                         });
-                        const json = await res.json();
-                        if (json.url) {
-                          window.location.href = json.url;
-                        } else {
-                          alert("Error: " + json.error);
-                        }
-                      } catch (e) { console.error(e); }
+                        const { url } = await res.json();
+                        if (url) window.location.href = url;
+                      } catch (e) {
+                        console.error("Checkout failed:", e);
+                        alert("Checkout failed. Check console.");
+                      }
                     }}
-                    style={{ marginTop: '20px', width: '100%', padding: '12px', backgroundColor: '#33ff55', color: '#000', border: 'none', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer' }}
-                  >
-                    Buy Niche Bundle (10 Niches for $5,000)
-                  </button>
+                    style={{ marginTop: '20px', width: '100%', padding: '10px', backgroundColor: 'transparent', color: color, border: `1px solid ${color}`, fontWeight: 'bold', cursor: 'pointer' }}>Buy Now (0.05 ETH)</button>
                 )}
               </div>
             ) : (
-              <div>
-                <p><strong>Status:</strong> AVAILABLE</p>
-                <p>This niche bundle (10 niches) is vacant and available for purchase.</p>
-                <button
-                  onClick={async () => {
-                    // if (!session) {
-                    //   alert("Please Sign In to purchase a Niche Bundle.");
-                    //   signIn("credentials");
-                    //   return;
-                    // }
-                    try {
-                      const res = await fetch("/api/checkout", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ shapeId: selectedNiche })
-                      });
-                      const json = await res.json();
-                      if (json.url) {
-                        window.location.href = json.url;
-                      } else {
-                        alert("Error: " + json.error);
-                      }
-                    } catch (e) { console.error(e); }
-                  }}
-                  style={{ marginTop: '15px', width: '100%', padding: '10px', backgroundColor: color, color: '#000', border: 'none', fontWeight: 'bold', cursor: 'pointer', borderRadius: '5px' }}>Buy Niche Bundle (10)</button>
+              <div style={{ marginTop: '15px', padding: '15px', backgroundColor: bgColor, borderLeft: `3px solid ${color}`, fontStyle: 'italic', color: '#eee' }}>
+                "This niche is available for purchase."
               </div>
             )}
           </div>
