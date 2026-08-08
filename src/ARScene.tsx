@@ -1669,87 +1669,249 @@ export default function ARScene({ onExit }: ARSceneProps) {
         const bgColor = data ? (isSold ? 'rgba(255,0,0,0.1)' : 'rgba(255,170,0,0.1)') : 'transparent';
 
         return (
-          <div style={{ position: 'absolute', top: '20%', right: '5%', width: '350px', backgroundColor: 'rgba(0,20,40,0.85)', border: `1px solid ${color}`, padding: '25px', color: color, borderRadius: '10px', zIndex: 10, boxShadow: `0 0 15px ${color}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${color}`, paddingBottom: '10px', marginBottom: '15px' }}>
-              <h3 style={{ margin: 0, textTransform: 'uppercase' }}>{data?.nicheNum || selectedNiche}</h3>
-              <button onClick={() => {
-                setSelectedNiche(null);
-                if (guideMode === 'nun') {
-                  setNunTargetNiche('RETURN');
-                }
-              }} style={{ background: 'none', border: 'none', color: color, cursor: 'pointer', fontSize: '1.2rem' }}>X</button>
-            </div>
+          <div style={{ 
+            position: 'absolute', 
+            top: '50%', 
+            left: '50%', 
+            transform: 'translate(-50%, -50%)',
+            display: 'flex',
+            width: '650px',
+            background: 'rgba(0, 30, 45, 0.75)',
+            backdropFilter: 'blur(8px)',
+            border: '2px solid #00e5ff',
+            boxShadow: '0 0 20px rgba(0, 229, 255, 0.5), inset 0 0 20px rgba(0, 229, 255, 0.2)',
+            borderRadius: '8px',
+            padding: '25px',
+            color: '#00e5ff',
+            fontFamily: '"Courier New", Courier, monospace',
+            zIndex: 10
+          }}>
+            {/* Corner Accents */}
+            <div style={{ position: 'absolute', top: -2, left: -2, width: '20px', height: '20px', borderTop: '4px solid #00e5ff', borderLeft: '4px solid #00e5ff' }}></div>
+            <div style={{ position: 'absolute', top: -2, right: -2, width: '20px', height: '20px', borderTop: '4px solid #00e5ff', borderRight: '4px solid #00e5ff' }}></div>
+            <div style={{ position: 'absolute', bottom: -2, left: -2, width: '20px', height: '20px', borderBottom: '4px solid #00e5ff', borderLeft: '4px solid #00e5ff' }}></div>
+            <div style={{ position: 'absolute', bottom: -2, right: -2, width: '20px', height: '20px', borderBottom: '4px solid #00e5ff', borderRight: '4px solid #00e5ff' }}></div>
+
+            <button onClick={() => {
+              setSelectedNiche(null);
+              if (typeof guideMode !== 'undefined' && guideMode === 'nun') {
+                setNunTargetNiche('RETURN');
+              }
+            }} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#00e5ff', cursor: 'pointer', fontSize: '1.5rem', fontWeight: 'bold', zIndex: 20 }}>✕</button>
 
             {['diamond', 'heart', 'star', 'square', 'spiral', 'sparil', 'cube'].find(s => selectedNiche.toLowerCase().includes(s)) ? (() => {
               let matchedShape = ['diamond', 'heart', 'star', 'square', 'spiral', 'sparil', 'cube'].find(s => selectedNiche.toLowerCase().includes(s))!;
               if (matchedShape === 'sparil') matchedShape = 'spiral';
               if (matchedShape === 'cube') matchedShape = 'square';
-              const shapeSlots = DUMMY_SHAPE_SLOTS[matchedShape] || [];
+              const shapeSlots = typeof DUMMY_SHAPE_SLOTS !== 'undefined' ? (DUMMY_SHAPE_SLOTS[matchedShape] || []) : [];
               return (
-              <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '10px' }}>
-                <p style={{ color: '#fff', margin: '0 0 10px 0', fontSize: '1.2rem', fontWeight: 'bold', borderBottom: '1px solid #ffaa00', paddingBottom: '5px', textTransform: 'capitalize' }}>
-                  Premium {matchedShape} Package (10 Slots)
-                </p>
-                {shapeSlots.map((slot, idx) => (
-                  <div key={idx} style={{ marginBottom: '15px', padding: '10px', backgroundColor: slot.status === 'available' ? 'rgba(51, 255, 85, 0.1)' : 'rgba(255, 0, 0, 0.1)', borderLeft: `3px solid ${slot.status === 'available' ? '#33ff55' : '#ff4444'}` }}>
-                    <h4 style={{ margin: '0 0 5px 0', color: slot.status === 'available' ? '#33ff55' : '#ff4444' }}>{slot.nicheNum}</h4>
-                    {slot.status === 'available' ? (
-                      <div>
-                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#eee' }}>Available for purchase</p>
-                        <button style={{ marginTop: '10px', padding: '5px 10px', backgroundColor: 'transparent', color: '#33ff55', border: '1px solid #33ff55', cursor: 'pointer' }}>Buy Slot</button>
-                      </div>
+                <div style={{ display: 'flex', width: '100%', maxHeight: '450px' }}>
+                  {/* Left Side: Image */}
+                  <div style={{ flex: '0 0 200px', display: 'flex', flexDirection: 'column', alignItems: 'center', marginRight: '30px' }}>
+                    <div style={{
+                      width: '180px',
+                      height: '240px',
+                      border: '2px solid #00e5ff',
+                      boxShadow: '0 0 15px rgba(0, 229, 255, 0.4)',
+                      overflow: 'hidden',
+                      position: 'relative'
+                    }}>
+                      <img src="/imgs/akasha.jfif" alt="Shape Package" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'contrast(1.2) brightness(1.1)' }} />
+                      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'linear-gradient(to bottom, rgba(0,229,255,0.1), transparent)' }}></div>
+                    </div>
+                    <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '0.8rem', letterSpacing: '2px' }}>
+                      <p style={{ margin: '0 0 5px 0', textTransform: 'uppercase', fontWeight: 'bold' }}>{matchedShape} PKG</p>
+                      <p style={{ margin: 0, opacity: 0.7 }}>CAPACITY // 10</p>
+                    </div>
+                  </div>
+
+                  {/* Right Side: Data */}
+                  <div style={{ flex: '1', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <h1 style={{ margin: '0 0 15px 0', fontSize: '2rem', letterSpacing: '3px', textShadow: '0 0 10px #00e5ff', textTransform: 'uppercase' }}>
+                      {matchedShape} REGISTRY
+                    </h1>
+                    
+                    <div style={{ flex: 1, overflowY: 'auto', paddingRight: '10px' }}>
+                      {shapeSlots.map((slot, idx) => (
+                        <div key={idx} style={{ 
+                          marginBottom: '15px', 
+                          padding: '10px', 
+                          backgroundColor: 'rgba(0, 229, 255, 0.05)', 
+                          borderLeft: `2px solid ${slot.status === 'available' ? '#00e5ff' : '#ff4444'}`,
+                          borderBottom: '1px solid rgba(0, 229, 255, 0.2)'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                            <span style={{ fontWeight: 'bold', color: slot.status === 'available' ? '#00e5ff' : '#ff4444', letterSpacing: '1px' }}>{slot.nicheNum.toUpperCase()}</span>
+                            <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>{slot.status === 'available' ? 'OPEN' : 'LOCKED'}</span>
+                          </div>
+                          
+                          {slot.status === 'available' ? (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>Available for initialization</span>
+                              <button style={{ padding: '4px 8px', backgroundColor: 'transparent', color: '#00e5ff', border: '1px solid #00e5ff', fontSize: '0.7rem', cursor: 'pointer' }}>ACQUIRE</button>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '0.8rem' }}>
+                              <div style={{ display: 'flex', marginBottom: '3px' }}>
+                                <span style={{ width: '70px', opacity: 0.7 }}>USER:</span>
+                                <span>{slot.name}</span>
+                              </div>
+                              <div style={{ display: 'flex' }}>
+                                <span style={{ width: '70px', opacity: 0.7 }}>DATA:</span>
+                                <span style={{ opacity: 0.8 }}>"{slot.message}"</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })() : data ? (
+              <div style={{ display: 'flex', width: '100%' }}>
+                {/* Left Side: Image */}
+                <div style={{ flex: '0 0 200px', display: 'flex', flexDirection: 'column', alignItems: 'center', marginRight: '30px' }}>
+                  <div style={{
+                    width: '180px',
+                    height: '240px',
+                    border: '2px solid #00e5ff',
+                    boxShadow: '0 0 15px rgba(0, 229, 255, 0.4)',
+                    overflow: 'hidden',
+                    position: 'relative'
+                  }}>
+                    {isSold ? (
+                      <img src="/imgs/akasha.jfif" alt="Niche Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'contrast(1.2) brightness(1.1)' }} />
                     ) : (
-                      <div>
-                        <p style={{ margin: 0, fontWeight: 'bold', color: '#fff' }}>{slot.name}</p>
-                        <p style={{ margin: '3px 0', fontSize: '0.8rem', color: '#ccc' }}>{slot.dob} - {slot.dod}</p>
-                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#aaa', fontStyle: 'italic' }}>"{slot.message}"</p>
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 229, 255, 0.05)', color: '#00e5ff', fontSize: '0.8rem', letterSpacing: '1px', opacity: 0.5, textAlign: 'center', padding: '10px' }}>
+                        AWAITING<br/>ACQUISITION
                       </div>
                     )}
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'linear-gradient(to bottom, rgba(0,229,255,0.1), transparent)' }}></div>
                   </div>
-                ))}
-              </div>
-            );})() : data ? (
-              <div>
-                <p style={{ color: '#fff', margin: '0 0 10px 0', fontSize: '1.2rem', fontWeight: 'bold' }}>{data.name}</p>
-                {isSold && (
-                  <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#ccc' }}>{data.dob} {data.dob && '-'} {data.dod}</p>
-                )}
-                {data.status === 'reserved' && data.dob && (
-                  <p style={{ margin: '5px 0', fontSize: '0.9rem', color: '#ccc' }}>Reserved since: {data.dob}</p>
-                )}
-                <div style={{ marginTop: '15px', padding: '15px', backgroundColor: bgColor, borderLeft: `3px solid ${color}`, fontStyle: 'italic', color: '#eee' }}>
-                  "{data.message || (data.status === 'SOLD' ? 'This niche bundle is sold.' : 'This niche is available for purchase.')}"
+                  <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '0.8rem', letterSpacing: '2px' }}>
+                    <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>{data.name.toUpperCase()}</p>
+                    <p style={{ margin: 0, opacity: 0.7 }}>ID // {selectedNiche.toUpperCase()}</p>
+                  </div>
                 </div>
-                {isSold && (
-                  <button style={{ marginTop: '20px', width: '100%', padding: '10px', backgroundColor: 'transparent', color: color, border: `1px solid ${color}`, fontWeight: 'bold', cursor: 'pointer' }}>View Memories & NFT</button>
-                )}
-                {data.status === 'available' && (
-                  <button
-                    onClick={async () => {
-                      // if (!session) {
-                      //   alert("Please Sign In to purchase a Niche.");
-                      //   signIn("credentials");
-                      //   return;
-                      // }
-                      try {
-                        const res = await fetch("/api/checkout", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ nicheId: selectedNiche })
-                        });
-                        const { url } = await res.json();
-                        if (url) window.location.href = url;
-                      } catch (e) {
-                        console.error("Checkout failed:", e);
-                        alert("Checkout failed. Check console.");
-                      }
-                    }}
-                    style={{ marginTop: '20px', width: '100%', padding: '10px', backgroundColor: 'transparent', color: color, border: `1px solid ${color}`, fontWeight: 'bold', cursor: 'pointer' }}>Buy Now (0.05 ETH)</button>
-                )}
+
+                {/* Right Side: Data */}
+                <div style={{ flex: '1', display: 'flex', flexDirection: 'column' }}>
+                  <h1 style={{ margin: '0 0 20px 0', fontSize: '2.5rem', letterSpacing: '5px', textShadow: '0 0 10px #00e5ff' }}>NFT</h1>
+                  
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px', fontSize: '0.9rem', letterSpacing: '1px' }}>
+                    
+                    <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '5px' }}>
+                      <span style={{ width: '100px', opacity: 0.7 }}>NAME</span>
+                      <span style={{ fontWeight: 'bold' }}>{data.name}</span>
+                    </div>
+                    
+                    <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '5px' }}>
+                      <span style={{ width: '100px', opacity: 0.7 }}>STATUS</span>
+                      <span style={{ fontWeight: 'bold', textTransform: 'uppercase', color: isSold ? '#ff4444' : '#00e5ff' }}>{data.status}</span>
+                    </div>
+
+                    {(data.dob || data.dod) && (
+                      <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '5px' }}>
+                        <span style={{ width: '100px', opacity: 0.7 }}>TIMELINE</span>
+                        <span style={{ fontWeight: 'bold' }}>{data.dob} // {data.dod}</span>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '5px' }}>
+                      <span style={{ width: '100px', opacity: 0.7 }}>DATA</span>
+                      <span style={{ fontWeight: 'bold', flex: 1 }}>{data.message || (isSold ? 'RESTRICTED' : 'NO DATA')}</span>
+                    </div>
+
+                  </div>
+
+                  <div style={{ marginTop: 'auto', paddingTop: '20px' }}>
+                    {data.status === 'available' ? (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await fetch("/api/checkout", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ nicheId: selectedNiche })
+                            });
+                            const { url } = await res.json();
+                            if (url) window.location.href = url;
+                          } catch (e) {
+                            console.error("Checkout failed:", e);
+                            alert("Checkout failed. Check console.");
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          backgroundColor: 'rgba(0, 229, 255, 0.1)',
+                          color: '#00e5ff',
+                          border: '1px solid #00e5ff',
+                          boxShadow: '0 0 10px rgba(0, 229, 255, 0.3)',
+                          fontWeight: 'bold',
+                          letterSpacing: '2px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        INITIALIZE ACQUISITION
+                      </button>
+                    ) : (
+                      <button
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          backgroundColor: 'rgba(0, 229, 255, 0.05)',
+                          color: '#00e5ff',
+                          border: '1px solid rgba(0, 229, 255, 0.5)',
+                          letterSpacing: '2px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ACCESS MEMORY CORE
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             ) : (
-              <div style={{ marginTop: '15px', padding: '15px', backgroundColor: bgColor, borderLeft: `3px solid ${color}`, fontStyle: 'italic', color: '#eee' }}>
-                "This niche is available for purchase."
+              <div style={{ padding: '20px', textAlign: 'center', fontSize: '1.2rem', letterSpacing: '2px', width: '100%' }}>
+                <p style={{ margin: '0 0 20px 0' }}>TARGET: {selectedNiche.toUpperCase()}</p>
+                <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '10px', marginBottom: '20px' }}>
+                  <span style={{ width: '120px', opacity: 0.7, textAlign: 'left' }}>STATUS</span>
+                  <span style={{ fontWeight: 'bold', textTransform: 'uppercase', color: '#00e5ff' }}>AVAILABLE</span>
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/checkout", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ nicheId: selectedNiche })
+                      });
+                      const { url } = await res.json();
+                      if (url) window.location.href = url;
+                    } catch (e) {
+                      console.error("Checkout failed:", e);
+                      alert("Checkout failed. Check console.");
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    backgroundColor: 'rgba(0, 229, 255, 0.1)',
+                    color: '#00e5ff',
+                    border: '1px solid #00e5ff',
+                    boxShadow: '0 0 10px rgba(0, 229, 255, 0.3)',
+                    fontWeight: 'bold',
+                    letterSpacing: '2px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  INITIALIZE ACQUISITION
+                </button>
               </div>
             )}
           </div>
