@@ -60,14 +60,20 @@ export const DUMMY_PEOPLE: DummyPerson[] = [
   { nicheNum: 'Niche-50', status: 'reserved', name: 'Reserved', dob: '', dod: '', message: 'This niche is reserved.' },
 ];
 
-export const DUMMY_DIAMOND_SLOTS: DummyPerson[] = [];
-for (let i = 1; i <= 10; i++) {
-  DUMMY_DIAMOND_SLOTS.push({
-    nicheNum: 'Diamond Slot ' + i,
-    status: i <= 2 ? 'occupied' : 'available',
-    name: i <= 2 ? 'Diamond Family Member ' + i : 'Available',
-    dob: i <= 2 ? '1950-01-01' : '',
-    dod: i <= 2 ? '2020-01-01' : '',
-    message: i <= 2 ? 'Forever shining' : 'This diamond slot is available for purchase.'
-  });
-}
+
+export const DUMMY_SHAPE_SLOTS: Record<string, DummyPerson[]> = {};
+const shapes = ['diamond', 'heart', 'star', 'square', 'spiral'];
+shapes.forEach(shape => {
+  const slots: DummyPerson[] = [];
+  for (let i = 1; i <= 10; i++) {
+    slots.push({
+      nicheNum: shape.charAt(0).toUpperCase() + shape.slice(1) + ' Slot ' + i,
+      status: i <= 2 ? 'occupied' : 'available',
+      name: i <= 2 ? shape.charAt(0).toUpperCase() + shape.slice(1) + ' Family Member ' + i : 'Available',
+      dob: i <= 2 ? '1950-01-01' : '',
+      dod: i <= 2 ? '2020-01-01' : '',
+      message: i <= 2 ? 'Forever shining' : 'This ' + shape + ' slot is available for purchase.'
+    });
+  }
+  DUMMY_SHAPE_SLOTS[shape] = slots;
+});
