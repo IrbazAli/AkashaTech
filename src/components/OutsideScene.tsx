@@ -308,6 +308,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
     loader.setDRACOLoader(dracoLoader);
     loader.setMeshoptDecoder(MeshoptDecoder);
 
+    let activePlacementTarget: THREE.Group | null = null;
     let spaceshipGroup: THREE.Group | null = null;
     let spaceshipMixer: THREE.AnimationMixer | null = null;
     let mainDoorActions: { action: THREE.AnimationAction, isOpen: boolean }[] = [];
@@ -386,6 +387,11 @@ export default function ARScene({ onExit }: ARSceneProps) {
         const bottomOffset = newBox.min.y - statue.position.y;
 
         statue.position.set(180.0, groundY - bottomOffset, 0.0);
+        
+        // TAG FOR PLACEMENT
+        statue.userData.isDraggableNft = true;
+        statue.userData.bottomOffset = bottomOffset;
+        
         scene.add(statue);
       });
 
@@ -414,7 +420,14 @@ export default function ARScene({ onExit }: ARSceneProps) {
         const newFBox = new THREE.Box3().setFromObject(fountain);
         const bottomOffset = newFBox.min.y - fountain.position.y;
 
-        fountain.position.set(250.0, groundY - bottomOffset, 0.0);
+        const nftTreeGroup = new THREE.Group();
+        nftTreeGroup.position.set(250.0, groundY - bottomOffset, 0.0);
+        
+        // TAG FOR PLACEMENT
+        nftTreeGroup.userData.isDraggableNft = true;
+        nftTreeGroup.userData.bottomOffset = bottomOffset;
+        
+        fountain.position.set(0, 0, 0);
 
         // Make grass green inside the fountain, leave marble alone
         fountain.traverse((child) => {
@@ -429,7 +442,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
           }
         });
 
-        scene.add(fountain);
+        nftTreeGroup.add(fountain);
+        scene.add(nftTreeGroup);
 
         // Load tree inside it
         loader.load('/models/tree.glb', (treeGltf) => {
@@ -449,10 +463,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
           const scale = 75.0 / maxDim; // 75 meters tall!
           tree.scale.set(scale, scale, scale);
 
-          // Just copy the exact Y position of the fountain so it is perfectly grounded inside it!
-          // Do not use bottomOffset for the tree because its bounding box calculation might be skewed by leaves extending downwards.
-          tree.position.copy(fountain.position);
-          scene.add(tree);
+          tree.position.set(0, 0, 0); // Position is 0 relative to the group
+          nftTreeGroup.add(tree);
         });
       });
 
@@ -1021,6 +1033,13 @@ export default function ARScene({ onExit }: ARSceneProps) {
     const onMouseClick = (event: MouseEvent) => {
       if (!controls.isLocked) return;
 
+      // DROP LOGIC
+      if (activePlacementTarget) {
+          console.log("[NFT Placement] Dropped object.");
+          activePlacementTarget = null;
+          return;
+      }
+
       raycaster.setFromCamera(center, camera);
       const intersects = raycaster.intersectObjects(scene.children, true);
 
@@ -1028,6 +1047,13 @@ export default function ARScene({ onExit }: ARSceneProps) {
       const interactiveIntersects = intersects.filter(i => {
         const name = i.object.name.toLowerCase();
         if (name.includes('room') || name.includes('gate') || name.includes('niche')) return true;
+        
+        let isNft = false;
+        i.object.traverseAncestors((ancestor) => {
+          if (ancestor.userData.isDraggableNft) isNft = true;
+        });
+        if (i.object.userData.isDraggableNft) isNft = true;
+        if (isNft) return true;
 
         let isGuide = false;
         i.object.traverseAncestors((ancestor) => {
@@ -1053,6 +1079,19 @@ export default function ARScene({ onExit }: ARSceneProps) {
         });
         if (object === window.__SPACESHIP_CACHE__?.guideGltf?.scene) isGuide = true;
 
+        // Check if NFT was clicked
+        let nftRoot = null;
+        if (object.userData.isDraggableNft) nftRoot = object;
+        object.traverseAncestors((ancestor) => {
+          if (ancestor.userData.isDraggableNft) nftRoot = ancestor;
+        });
+
+        if (nftRoot) {
+          console.log("[NFT Placement] Picked up object.");
+          activePlacementTarget = nftRoot;
+          return; // Consume click
+        }
+        
         if (isGuide) {
           controls.unlock();
           setShowNunDialog(true);
@@ -1148,6 +1187,26 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
     renderer.setAnimationLoop(() => {
       if (!isMounted) return;
+      
+      // NFT PLACEMENT LOGIC
+      if (activePlacementTarget) {
+          const placementRaycaster = new THREE.Raycaster();
+          placementRaycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+          
+          if (envGroup) {
+              const intersects = placementRaycaster.intersectObject(envGroup, true);
+              if (intersects.length > 0) {
+                  const hit = intersects[0];
+                  // Set X and Z to the hit point
+                  activePlacementTarget.position.x = hit.point.x;
+                  activePlacementTarget.position.z = hit.point.z;
+                  
+                  // Set Y exactly on the ground based on bottomOffset
+                  const offset = activePlacementTarget.userData.bottomOffset || 0;
+                  activePlacementTarget.position.y = hit.point.y - offset;
+              }
+          }
+      }
       const time = performance.now();
       // Cap delta time to prevent massive jumps when switching tabs
       const delta = Math.min(0.05, (time - lastTime) / 1000);
