@@ -38,7 +38,7 @@ export default function PrivateRoomScene() {
   // Physics and controls
   const worldOctree = useRef(new Octree());
   const controlsRef = useRef<PointerLockControls | null>(null);
-  const playerCollider = useRef(new Capsule(new THREE.Vector3(-2, 0.35, -2), new THREE.Vector3(-2, 1.45, -2), 0.35));
+  const playerCollider = useRef(new Capsule(new THREE.Vector3(-2, 0.35, -2), new THREE.Vector3(-2, 1.5, -2), 0.35));
   const playerVelocity = useRef(new THREE.Vector3());
   const playerDirection = useRef(new THREE.Vector3());
   const playerOnFloor = useRef(false);
@@ -50,6 +50,7 @@ export default function PrivateRoomScene() {
   const headMeshRef = useRef<THREE.Mesh | null>(null);
   const teethMeshRef = useRef<THREE.Mesh | null>(null);
   const headBoneRef = useRef<THREE.Object3D | null>(null);
+  const avatarLightRef = useRef<THREE.PointLight | null>(null);
 
   // Audio & Lipsync
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -109,10 +110,11 @@ export default function PrivateRoomScene() {
     const ambientLight = new THREE.AmbientLight(0x111116, 1.0); // Dim cool ambient // Dim cool ambient
     scene.add(ambientLight);
 
-    // Light specifically to illuminate the avatar
-    const avatarLight = new THREE.PointLight(0xaaccff, 2.0, 10);
+    // Light specifically to illuminate the avatar (radius limited to 3 meters)
+    const avatarLight = new THREE.PointLight(0xaaccff, 2.0, 3);
     avatarLight.position.set(-0.5, 1.5, -1.0);
     scene.add(avatarLight);
+    avatarLightRef.current = avatarLight;
 
     // Initial Load - load Cave
     const loader = new GLTFLoader();
@@ -156,6 +158,15 @@ export default function PrivateRoomScene() {
       requestAnimationFrame(animate);
       const deltaTime = Math.min(0.05, clock.getDelta());
 
+      // Update dynamic avatar light to follow the avatar's face
+      if (avatarLightRef.current && avatarGroup.current && cameraRef.current) {
+        const toCam = new THREE.Vector3().subVectors(cameraRef.current.position, avatarGroup.current.position);
+        toCam.y = 0;
+        toCam.normalize();
+        // Place light slightly above avatar's head, offset towards the camera so the face is beautifully lit
+        avatarLightRef.current.position.copy(avatarGroup.current.position).add(new THREE.Vector3(0, 1.5, 0)).add(toCam.multiplyScalar(0.8));
+      }
+
       // Update avatar animations
       if (avatarMixer.current) {
         avatarMixer.current.update(deltaTime);
@@ -175,8 +186,9 @@ export default function PrivateRoomScene() {
           // Get direction to camera
           const toCam = new THREE.Vector3().subVectors(cam.position, headPos).normalize();
 
-          // If camera is in front of avatar (dot product > 0 means within 180 degree cone)
-          if (avatarForward.dot(toCam) > 0 && convStateRef.current !== 'WALKING_TO_SOFA' && convStateRef.current !== 'STORY_WALKING') {
+          // Relaxed cone to allow looking over her shoulder (dot > -0.5)
+          // Enabled for STORY_WALKING so her head tracks you when she stops walking!
+          if (avatarForward.dot(toCam) > -0.5 && convStateRef.current !== 'WALKING_TO_SOFA') {
             head.lookAt(cam.position);
           }
         }
@@ -296,9 +308,9 @@ export default function PrivateRoomScene() {
           // Adjusted upward and slightly forward
           avatarGroup.current.position.set(-0.5, 0.05, -3.15); // Pushed back onto the seat
 
-          // Lock player view and height!
-          playerCollider.current.start.set(-0.5, 0.2, -2.0);
-          playerCollider.current.end.set(-0.5, 0.7, -2.0);
+          // Lock player view and height! Moved slightly to the right (X: 0.0 instead of -0.5)
+          playerCollider.current.start.set(0.0, 0.2, -2.0);
+          playerCollider.current.end.set(0.0, 0.7, -2.0);
           if (cameraRef.current && avatarGroup.current) {
             const lookTarget = avatarGroup.current.position.clone();
             lookTarget.y = 0.7; // face height
@@ -319,30 +331,93 @@ export default function PrivateRoomScene() {
         const currentPos = avatarGroup.current.position.clone();
         currentPos.y = 0;
 
-        const targetPos = wanderTarget.current.clone();
-        targetPos.y = 0;
+        const playerPos = playerCollider.current.end.clone();
+        playerPos.y = 0;
 
-        const dir = new THREE.Vector3().subVectors(targetPos, currentPos);
-        const dist = dir.length();
+        const distToPlayer = currentPos.distanceTo(playerPos);
+        const playerSpeed = Math.sqrt(playerVelocity.current.x * playerVelocity.current.x + playerVelocity.current.z * playerVelocity.current.z);
 
-        if (dist > 0.5) {
-          dir.normalize();
-          avatarGroup.current.position.addScaledVector(dir, 0.5 * deltaTime);
-          avatarGroup.current.rotation.y = Math.atan2(dir.x, dir.z);
+        let isWalking = false;
+        let targetRot = avatarGroup.current.rotation.y;
+
+        if (playerSpeed > 0.1) {
+          // 1. VELOCITY-BASED WALKING (Player is moving)
+          isWalking = true;
+
+          // Compute walking direction from physical velocity, NOT camera look direction
+          const moveDir = new THREE.Vector3(playerVelocity.current.x, 0, playerVelocity.current.z).normalize();
+          // Right vector of the movement path
+          const moveRight = new THREE.Vector3(-moveDir.z, 0, moveDir.x);
+
+          // Target is 1.2m to the right and 0.3m ahead of the physical movement path
+          const targetPos = playerPos.clone().add(moveRight.multiplyScalar(1.2)).add(moveDir.clone().multiplyScalar(0.3));
+          targetPos.y = 0;
+
+          const distToTarget = currentPos.distanceTo(targetPos);
+
+          // Match speed exactly to player's physical speed
+          const catchUpSpeed = playerSpeed;
+          const dirToTarget = new THREE.Vector3().subVectors(targetPos, currentPos);
+
+          if (dirToTarget.length() > 0.05) {
+            dirToTarget.normalize();
+            // Lerp-like movement towards the moving target
+            const moveDist = Math.min(distToTarget, catchUpSpeed * deltaTime);
+            avatarGroup.current.position.addScaledVector(dirToTarget, moveDist);
+          }
+
+          // Smoothly face the direction she is actually walking
+          if (dirToTarget.length() > 0.1) {
+            targetRot = Math.atan2(dirToTarget.x, dirToTarget.z);
+          } else {
+            targetRot = Math.atan2(moveDir.x, moveDir.z); // Face forward if perfectly positioned
+          }
+
+        } else if (distToPlayer > 1.8) {
+          // 2. CATCHING UP (Player stopped, but avatar is too far)
+          isWalking = true;
+
+          const dirToPlayer = new THREE.Vector3().subVectors(playerPos, currentPos).normalize();
+          // Stop 1.5m away from player
+          const targetPos = playerPos.clone().sub(dirToPlayer.clone().multiplyScalar(1.5));
+          targetPos.y = 0;
+
+          const distToTarget = currentPos.distanceTo(targetPos);
+          const catchUpSpeed = 0.5; // Match player's new top walking speed (0.5 m/s)
+
+          const dirToTarget = new THREE.Vector3().subVectors(targetPos, currentPos);
+          if (dirToTarget.length() > 0.1) {
+            dirToTarget.normalize();
+            const moveDist = Math.min(distToTarget, catchUpSpeed * deltaTime);
+            avatarGroup.current.position.addScaledVector(dirToTarget, moveDist);
+
+            // Face the direction she is walking to catch up
+            targetRot = Math.atan2(dirToTarget.x, dirToTarget.z);
+          }
+
+        } else {
+          // 3. CONVERSATIONAL STANDING (Player stopped, avatar is in the comfort zone)
+          isWalking = false;
+
+          // Body stays perfectly still in whatever direction she was last moving.
+          // targetRot remains avatarGroup.current.rotation.y
+          // Head tracking handles looking at the player organically!
+          targetRot = avatarGroup.current.rotation.y;
+        }
+
+        // Apply Smooth Rotation
+        let diff = targetRot - avatarGroup.current.rotation.y;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        avatarGroup.current.rotation.y += diff * 6 * deltaTime;
+
+        // Animation State Management
+        if (isWalking) {
           if (animationsMap.current['Walking'] && !animationsMap.current['Walking'].isRunning()) {
             Object.values(animationsMap.current).forEach(anim => anim.stop());
             animationsMap.current['Walking'].reset().fadeIn(0.2).play();
           }
         } else {
-          // Reached wander target, pick a new one
-          pickNewWanderTarget();
-
-          // Look at player briefly
-          const playerPos = playerCollider.current.end.clone();
-          playerPos.y = 0;
-          const dirToPlayer = new THREE.Vector3().subVectors(playerPos, currentPos);
-          avatarGroup.current.rotation.y = Math.atan2(dirToPlayer.x, dirToPlayer.z);
-
           if (animationsMap.current['Talking_0'] && !animationsMap.current['Talking_0'].isRunning()) {
             Object.values(animationsMap.current).forEach(anim => anim.stop());
             animationsMap.current['Talking_0'].reset().fadeIn(0.2).play();
@@ -360,7 +435,7 @@ export default function PrivateRoomScene() {
 
       // Physics controls
       if (controls.isLocked && convStateRef.current !== 'STORY_SOFA') {
-        const speedDelta = deltaTime * (playerOnFloor.current ? 180 : 50);
+        const speedDelta = deltaTime * 6;
         if (keyStates['KeyW']) playerVelocity.current.add(getForwardVector().multiplyScalar(speedDelta));
         if (keyStates['KeyS']) playerVelocity.current.add(getForwardVector().multiplyScalar(-speedDelta));
         if (keyStates['KeyA']) playerVelocity.current.add(getSideVector().multiplyScalar(-speedDelta));
@@ -371,7 +446,7 @@ export default function PrivateRoomScene() {
         }
       }
 
-      let damping = Math.exp(-15 * deltaTime) - 1;
+      let damping = Math.exp(-12 * deltaTime) - 1;
       if (caveColliderRef.current) {
         if (!playerOnFloor.current) {
           playerVelocity.current.y -= 20 * deltaTime; // Gravity!
@@ -388,6 +463,7 @@ export default function PrivateRoomScene() {
       // Lock player Y to a flat plane for 60 FPS performance!
       // The high-poly cave mesh causes 2 FPS drops when raycasting every frame.
       playerCollider.current.start.y = 0.5;
+      playerCollider.current.end.y = 1.5; // Match avatar eye-level precisely
 
 
       // Resolve player collisions using Octree!

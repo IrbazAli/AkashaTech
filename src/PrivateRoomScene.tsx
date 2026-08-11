@@ -308,29 +308,54 @@ export default function PrivateRoomScene() {
          const currentPos = avatarGroup.current.position.clone();
          currentPos.y = 0;
          
-         const targetPos = wanderTarget.current.clone();
+         const playerPos = playerCollider.current.end.clone();
+         playerPos.y = 0;
+         
+         const forward = getForwardVector();
+         const right = getSideVector();
+         
+         // Desired position: 1.2 units to the right, and 0.3 units ahead of the player
+         // This places them beautifully in the peripheral vision
+         const targetPos = playerPos.clone().add(right.multiplyScalar(1.2)).add(forward.multiplyScalar(0.3));
          targetPos.y = 0;
          
-         const dir = new THREE.Vector3().subVectors(targetPos, currentPos);
-         const dist = dir.length();
+         const dist = currentPos.distanceTo(targetPos);
          
-         if (dist > 0.5) {
-            dir.normalize();
-            avatarGroup.current.position.addScaledVector(dir, 0.5 * deltaTime);
-            avatarGroup.current.rotation.y = Math.atan2(dir.x, dir.z);
+         // Player's actual speed on XZ plane
+         const playerSpeed = Math.sqrt(playerVelocity.current.x * playerVelocity.current.x + playerVelocity.current.z * playerVelocity.current.z);
+         
+         // Walk if we are too far, or if the player is actively moving
+         if (dist > 0.4 || playerSpeed > 0.1) {
+            // Speed matches player if they are moving, otherwise a fixed walking speed to catch up
+            const catchUpSpeed = Math.max(1.8, playerSpeed * 1.2); 
+            
+            const dir = new THREE.Vector3().subVectors(targetPos, currentPos);
+            if (dir.length() > 0.01) {
+               dir.normalize();
+               // Cap movement so it doesn't overshoot
+               const moveDist = Math.min(dist, catchUpSpeed * deltaTime);
+               avatarGroup.current.position.addScaledVector(dir, moveDist);
+               
+               // Smoothly rotate towards movement direction
+               const targetRot = Math.atan2(dir.x, dir.z);
+               let diff = targetRot - avatarGroup.current.rotation.y;
+               while (diff < -Math.PI) diff += Math.PI * 2;
+               while (diff > Math.PI) diff -= Math.PI * 2;
+               avatarGroup.current.rotation.y += diff * 10 * deltaTime;
+            }
+            
             if (animationsMap.current['Walking'] && !animationsMap.current['Walking'].isRunning()) {
                Object.values(animationsMap.current).forEach(anim => anim.stop());
                animationsMap.current['Walking'].reset().fadeIn(0.2).play();
             }
          } else {
-            // Reached wander target, pick a new one
-            pickNewWanderTarget();
-            
-            // Look at player briefly
-            const playerPos = playerCollider.current.end.clone();
-            playerPos.y = 0;
-            const dirToPlayer = new THREE.Vector3().subVectors(playerPos, currentPos);
-            avatarGroup.current.rotation.y = Math.atan2(dirToPlayer.x, dirToPlayer.z);
+            // Reached position beside player, stop walking and turn slightly towards player
+            const faceDir = forward.clone().lerp(new THREE.Vector3().subVectors(playerPos, currentPos).normalize(), 0.4);
+            const targetRot = Math.atan2(faceDir.x, faceDir.z);
+            let diff = targetRot - avatarGroup.current.rotation.y;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            avatarGroup.current.rotation.y += diff * 5 * deltaTime;
             
             if (animationsMap.current['Talking_0'] && !animationsMap.current['Talking_0'].isRunning()) {
                Object.values(animationsMap.current).forEach(anim => anim.stop());
