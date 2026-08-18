@@ -181,7 +181,12 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
   // Dynamic Tube Dimensions
   const tubeCenterRef = useRef<THREE.Vector3 | null>(null);
-  const tubeRadiusRef = useRef<number>(3.5);
+  const tubeRadiusRef = useRef<number>(0);
+
+  // Ground Elevator
+  const groundTubeCenterRef = useRef<THREE.Vector3 | null>(null);
+  const groundTubeRadiusRef = useRef<number>(0);
+  const groundDoorsRef = useRef<{ mesh: THREE.Mesh, side: 'left' | 'right', initialZ: number, isOpen: boolean }[]>([]);
 
   // Helper to sync ref and state
   const updateInTube = (val: boolean) => {
@@ -359,7 +364,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       envGroup.updateMatrixWorld(true);
 
       if (spaceshipGroup) {
-        spaceshipGroup.position.set(54.62, 0, 0); // Keep spaceship rigidly at original Y=0
+        spaceshipGroup.position.set(54.62, 150, 0); // Keep spaceship rigidly at original Y=0
         spaceshipGroup.updateMatrixWorld(true);
       }
 
@@ -387,11 +392,11 @@ export default function ARScene({ onExit }: ARSceneProps) {
         const bottomOffset = newBox.min.y - statue.position.y;
 
         statue.position.set(180.0, groundY - bottomOffset, 0.0);
-        
+
         // TAG FOR PLACEMENT
         statue.userData.isDraggableNft = true;
         statue.userData.bottomOffset = bottomOffset;
-        
+
         scene.add(statue);
       });
 
@@ -422,11 +427,11 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
         const nftTreeGroup = new THREE.Group();
         nftTreeGroup.position.set(250.0, groundY - bottomOffset, 0.0);
-        
+
         // TAG FOR PLACEMENT
         nftTreeGroup.userData.isDraggableNft = true;
         nftTreeGroup.userData.bottomOffset = bottomOffset;
-        
+
         fountain.position.set(0, 0, 0);
 
         // Make grass green inside the fountain, leave marble alone
@@ -494,7 +499,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
     const applySpaceshipGltf = (gltf: any) => {
       spaceshipGroup = gltf.scene;
-      spaceshipGroup.position.set(54.62, 0, 0);
+      spaceshipGroup.position.set(54.62, 150, 0);
       scene.add(spaceshipGroup!);
 
       if (gltf.animations && gltf.animations.length > 0) {
@@ -607,6 +612,10 @@ export default function ARScene({ onExit }: ARSceneProps) {
           // Update world matrices so bounding boxes correctly account for the X=54.62 shift
           spaceshipGroup!.updateMatrixWorld(true);
 
+          const groundElevatorGroup = new THREE.Group();
+          groundElevatorGroup.position.set(0, 0, 0); // Use world origin to place items accurately
+          scene.add(groundElevatorGroup);
+
           const allNiches: THREE.Mesh[] = [];
           spaceshipGroup!.traverse((child) => {
             const nodeName = child.name.toLowerCase();
@@ -616,6 +625,21 @@ export default function ARScene({ onExit }: ARSceneProps) {
               box.getCenter(center);
               tubeCenterRef.current = center;
               tubeRadiusRef.current = (box.max.x - box.min.x) / 2;
+
+              // Create Ground Tube under the Nun at (50.0, -2.0)
+              const visualRadius = tubeRadiusRef.current * 4.0; // Make it significantly larger *4 as requested
+              const tubeGeometry = new THREE.CylinderGeometry(visualRadius, visualRadius, 250, 32); // Extremely tall so it goes deep underground
+              const tubeMaterial = (child as THREE.Mesh).material;
+              const newTube = new THREE.Mesh(tubeGeometry, tubeMaterial);
+
+              // Center it under the Nun!
+              newTube.position.set(50.0, 25.0, -2.0); // Spans -100 to 150
+              groundElevatorGroup.add(newTube);
+
+              const groundCenter = new THREE.Vector3(50.0, 75.0, -2.0);
+              groundTubeCenterRef.current = groundCenter;
+              // Make physical collision boundary match the 4x expanded visual boundary
+              groundTubeRadiusRef.current = visualRadius;
             }
             if (nodeName.includes('room') && !nodeName.includes('main')) {
               allNiches.push(child as THREE.Mesh);
@@ -635,6 +659,50 @@ export default function ARScene({ onExit }: ARSceneProps) {
               } else {
                 // f0
                 child.position.y -= 1.5; // Lower ground floor glass door so it touches the floor
+
+                // CLONE FOR GROUND ELEVATOR using exact world transforms
+                const groundDoor = new THREE.Mesh((child as THREE.Mesh).geometry, (child as THREE.Mesh).material);
+
+                const worldPos = new THREE.Vector3();
+                child.getWorldPosition(worldPos);
+                const worldQuat = new THREE.Quaternion();
+                child.getWorldQuaternion(worldQuat);
+                const worldScale = new THREE.Vector3();
+                child.getWorldScale(worldScale);
+
+                // Push the doors out to the walls of the 4x expanded cylinder!
+                // Upper tube center might be available in tubeCenterRef.current. 
+                const uCx = tubeCenterRef.current ? tubeCenterRef.current.x : 54.62;
+                const uCz = tubeCenterRef.current ? tubeCenterRef.current.z : 0;
+
+                const offsetDx = worldPos.x - uCx;
+                const offsetDz = worldPos.z - uCz;
+
+                groundDoor.position.x = 50.0 + offsetDx * 4.0; // Center is 50.0 (Nun X), push out 4x
+                groundDoor.position.z = -2.0 + offsetDz * 4.0; // Center is -2.0 (Nun Z), push out 4x
+
+                // Instead of hardcoding -163, we raycast to find the exact terrain height!
+                const doorRaycaster = new THREE.Raycaster();
+                doorRaycaster.set(new THREE.Vector3(groundDoor.position.x, 500, groundDoor.position.z), new THREE.Vector3(0, -1, 0));
+                if (envGroup) {
+                  const hits = doorRaycaster.intersectObject(envGroup, true);
+                  if (hits.length > 0) {
+                    groundDoor.position.y = hits[0].point.y;
+                  } else {
+                    groundDoor.position.y = 2.8; // The terrain is shifted to exactly 2.8 at the center
+                  }
+                } else {
+                  // Fallback if envGroup isn't loaded yet
+                  groundDoor.position.y = 2.8;
+                }
+
+                groundDoor.quaternion.copy(worldQuat);
+                groundDoor.scale.copy(worldScale);
+                groundDoor.scale.y *= 1.6 * 1.9; // Apply the same visual scale improvements as the original doors
+
+                groundElevatorGroup.add(groundDoor);
+                const groundSide = nodeName.includes('left') ? 'left' : 'right';
+                groundDoorsRef.current.push({ mesh: groundDoor as THREE.Mesh, side: groundSide, initialZ: groundDoor.position.z, isOpen: false });
               }
               child.scale.y *= 1.6; // Multiplicatively scale the visual glass doors up so they don't shrink if their default scale was > 1.25
               child.scale.y *= 1.9; // Scale the visual glass doors up significantly so they are taller!
@@ -739,15 +807,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       );
 
       // Load the Screen Wall
-      loader.load('/models/wall.glb', (wallGltf) => {
-        if (!isMounted) return;
-
-        const wallScene = wallGltf.scene;
-        wallScene.position.set(-91, 30.94, 1.6);
-        wallScene.scale.set(1.0, 0.40, 0.40);
-        wallScene.rotation.y = Math.PI;
-        scene.add(wallScene);
-      });
+      // (Removed deprecated wall.glb as it's no longer used)
 
     }
 
@@ -766,7 +826,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       }
       const avatarGroup = new THREE.Group();
       avatarGroup.add(avatar);
-      avatarGroup.position.set(50.0, 10.0, -2.0); // Static height
+      avatarGroup.position.set(50.0, 160.0, -2.0); // Static height +150
       avatarGroup.scale.set(2, 2, 2);
       if (window.__SPACESHIP_CACHE__) window.__SPACESHIP_CACHE__.guideOuterGroup = avatarGroup;
 
@@ -843,10 +903,10 @@ export default function ARScene({ onExit }: ARSceneProps) {
       const tvGeometry = new THREE.PlaneGeometry(16, 9); // 16:9 aspect ratio
       const tvMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
       const tvMesh = new THREE.Mesh(tvGeometry, tvMaterial);
-
-      // Position TV on the outer wall (approx X = -43)
-      tvMesh.position.set(-18.0, 33.0, 0);
-      tvMesh.lookAt(0, 36.0, 0); // Face towards the center of the spaceship
+      // tv material color
+      (tvMesh.material as THREE.MeshBasicMaterial).color.setHex(0x111111);
+      tvMesh.position.set(-18.0, 183.0, 0);
+      tvMesh.lookAt(0, 186.0, 0); // Face towards the center of the spaceship
       tvMesh.scale.set(0.3, 0.3, 0.3);
       scene.add(tvMesh);
 
@@ -864,8 +924,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
       // Position Wall opposite to TV (Flip the X axis)
       // Moved UP by 2 meters to avoid clipping with the 3rd floor or railings!
-      wallMesh.position.set(-36.0, 35.0, 0);
-      wallMesh.lookAt(0, 35.0, 0); // Face towards the center
+      wallMesh.position.set(-36.0, 185.0, 0); // +150
+      wallMesh.lookAt(0, 185.0, 0); // Face towards the center
       wallMesh.scale.set(0.3, 0.3, 0.3);
       scene.add(wallMesh);
 
@@ -893,9 +953,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
           });
 
           const mesh = new THREE.Mesh(geometry, material);
-          // Base Y is 35.0 (center of board)
-          mesh.position.set(-35.8, 35.0 + yOffset, zOffset);
-          mesh.lookAt(0, 35.0 + yOffset, zOffset);
+          // Base Y is 185.0 (center of board)
+          mesh.position.set(-35.8, 185.0 + yOffset, zOffset);
+          mesh.lookAt(0, 185.0 + yOffset, zOffset);
           scene.add(mesh);
         });
       };
@@ -1035,9 +1095,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
       // DROP LOGIC
       if (activePlacementTarget) {
-          console.log("[NFT Placement] Dropped object.");
-          activePlacementTarget = null;
-          return;
+        console.log("[NFT Placement] Dropped object.");
+        activePlacementTarget = null;
+        return;
       }
 
       raycaster.setFromCamera(center, camera);
@@ -1047,7 +1107,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       const interactiveIntersects = intersects.filter(i => {
         const name = i.object.name.toLowerCase();
         if (name.includes('room') || name.includes('gate') || name.includes('niche') || ['diamond', 'heart', 'star', 'square', 'spiral', 'sparil', 'cube'].some(s => name.includes(s))) return true;
-        
+
         let isNft = false;
         i.object.traverseAncestors((ancestor) => {
           if (ancestor.userData.isDraggableNft) isNft = true;
@@ -1091,7 +1151,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           activePlacementTarget = nftRoot;
           return; // Consume click
         }
-        
+
         if (isGuide) {
           controls.unlock();
           setShowNunDialog(true);
@@ -1188,25 +1248,25 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
     renderer.setAnimationLoop(() => {
       if (!isMounted) return;
-      
+
       // NFT PLACEMENT LOGIC
       if (activePlacementTarget) {
-          const placementRaycaster = new THREE.Raycaster();
-          placementRaycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-          
-          if (envGroup) {
-              const intersects = placementRaycaster.intersectObject(envGroup, true);
-              if (intersects.length > 0) {
-                  const hit = intersects[0];
-                  // Set X and Z to the hit point
-                  activePlacementTarget.position.x = hit.point.x;
-                  activePlacementTarget.position.z = hit.point.z;
-                  
-                  // Set Y exactly on the ground based on bottomOffset
-                  const offset = activePlacementTarget.userData.bottomOffset || 0;
-                  activePlacementTarget.position.y = hit.point.y - offset;
-              }
+        const placementRaycaster = new THREE.Raycaster();
+        placementRaycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+        if (envGroup) {
+          const intersects = placementRaycaster.intersectObject(envGroup, true);
+          if (intersects.length > 0) {
+            const hit = intersects[0];
+            // Set X and Z to the hit point
+            activePlacementTarget.position.x = hit.point.x;
+            activePlacementTarget.position.z = hit.point.z;
+
+            // Set Y exactly on the ground based on bottomOffset
+            const offset = activePlacementTarget.userData.bottomOffset || 0;
+            activePlacementTarget.position.y = hit.point.y - offset;
           }
+        }
       }
       const time = performance.now();
       // Cap delta time to prevent massive jumps when switching tabs
@@ -1263,7 +1323,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
           pawGroupRef.current = new THREE.Group();
           scene.add(pawGroupRef.current);
 
-          const startPos = new THREE.Vector3(50.0, targetFloorYRef.current + 0.1, -2.0); // Start from Nun's Idle Position!
+          // Start from Nun's Idle Position! (Plus 150 for the floating spaceship height)
+          const startPos = new THREE.Vector3(50.0, targetFloorYRef.current + 150.0 + 0.1, -2.0);
 
           const nichePos = new THREE.Vector3();
           const box = new THREE.Box3().setFromObject(targetMesh);
@@ -1449,7 +1510,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
             const nunRaycaster = new THREE.Raycaster();
             const downVector = new THREE.Vector3(0, -1, 0);
             // Shoot from Y=14.0 to start BELOW the ceiling (which is at Y=19.14) but ABOVE the floor (Y=11.1)
-            nunRaycaster.set(new THREE.Vector3(avatarGroup.position.x, 14.0, avatarGroup.position.z), downVector);
+            nunRaycaster.set(new THREE.Vector3(avatarGroup.position.x, 164.0, avatarGroup.position.z), downVector);
             const collidableObjects = [];
 
             if (window.__SPACESHIP_CACHE__ && window.__SPACESHIP_CACHE__.gltf) {
@@ -1724,6 +1785,37 @@ export default function ARScene({ onExit }: ARSceneProps) {
         });
       }
 
+      // Ground Elevator Doors
+      if (groundDoorsRef.current.length > 0 && groundTubeCenterRef.current) {
+        const playerPos = playerCollider.start;
+        const tubePos = groundTubeCenterRef.current;
+
+        const distToGroundTube = Math.sqrt(
+          Math.pow(playerPos.x - tubePos.x, 2) +
+          Math.pow(playerPos.z - tubePos.z, 2)
+        );
+
+        groundDoorsRef.current.forEach(door => {
+          // Only open if near the ground
+          const shouldOpen = distToGroundTube < 5.0 && playerPos.y < 30.0;
+          const targetOffset = shouldOpen ? 0.8 : 0;
+          door.isOpen = shouldOpen;
+
+          const currentOffset = Math.abs(door.mesh.position.z - door.initialZ);
+          const diff = targetOffset - currentOffset;
+
+          if (Math.abs(diff) > 0.01) {
+            const step = Math.sign(diff) * 1.5 * delta;
+            if (Math.abs(step) > Math.abs(diff)) {
+              door.mesh.position.z = door.initialZ + (door.side === 'left' ? targetOffset : -targetOffset);
+            } else {
+              door.mesh.position.z += door.side === 'left' ? step : -step;
+            }
+          }
+        });
+      }
+
+
       // Desktop Movement Logic (Octree & Capsule)
       if (controls.isLocked) {
         // Calculate forward/right vectors based on camera yaw
@@ -1773,13 +1865,28 @@ export default function ARScene({ onExit }: ARSceneProps) {
             const tempDx = playerCollider.start.x - tubeCenterRef.current.x;
             const tempDz = playerCollider.start.z - tubeCenterRef.current.z;
             const tempRadius = Math.max(2.0, Math.min(tubeRadiusRef.current, 10.0));
-            if (Math.sqrt(tempDx * tempDx + tempDz * tempDz) < tempRadius) {
+            if (Math.sqrt(tempDx * tempDx + tempDz * tempDz) < tempRadius && playerCollider.start.y >= 140.0) {
               isCurrentlyInTube = true;
             }
           }
 
-          // Resolve Collisions with Octree ONLY if outside tube
-          if (!isCurrentlyInTube) {
+          // Ground Chamber Pre-Check
+          let isCurrentlyInGroundTube = false;
+          let distToGroundTubeCenter = 0;
+
+          if (groundTubeCenterRef.current) {
+            const tempDx = playerCollider.start.x - groundTubeCenterRef.current.x;
+            const tempDz = playerCollider.start.z - groundTubeCenterRef.current.z;
+            const tempRadius = Math.max(2.0, Math.min(groundTubeRadiusRef.current, 10.0));
+            // Keep lifting until they are slightly ABOVE the spaceship floor (163.05)
+            // so that when octree takes over, they smoothly drop 0.05m onto the floor instead of getting stuck inside it.
+            if (Math.sqrt(tempDx * tempDx + tempDz * tempDz) < tempRadius && playerCollider.start.y < 160.05) {
+              isCurrentlyInGroundTube = true;
+            }
+          }
+
+          // Resolve Collisions with Octree ONLY if outside BOTH tubes
+          if (!isCurrentlyInTube && !isCurrentlyInGroundTube) {
             playerCollisions();
           }
 
@@ -1831,18 +1938,60 @@ export default function ARScene({ onExit }: ARSceneProps) {
             // Recalculate distance in case it was clamped
             const newDx = playerCollider.start.x - tubeCenterRef.current.x;
             const newDz = playerCollider.start.z - tubeCenterRef.current.z;
-            isCurrentlyInTube = Math.sqrt(newDx * newDx + newDz * newDz) < activeRadius;
+            isCurrentlyInTube = Math.sqrt(newDx * newDx + newDz * newDz) < activeRadius && playerCollider.start.y >= 140.0;
           }
 
           updateInTube(isCurrentlyInTube);
 
-          let targetY = targetFloorYRef.current;
+          // targetFloorYRef holds the local Y (11.0, 21.48, etc). Add 150.0 to get world Y in the spaceship.
+          let targetY = targetFloorYRef.current + 150.0;
 
           if (isCurrentlyInTube) {
             // Inside tube: Smoothly float to target floor Y
             const diff = targetY - playerCollider.start.y;
             const stepY = Math.sign(diff) * Math.min(Math.abs(diff), 12.0 * dt);
             playerCollider.translate(new THREE.Vector3(0, stepY, 0));
+          }
+
+          // Ground Glass Boundary Clamping
+          if (groundTubeCenterRef.current) {
+            const gx = playerCollider.start.x - groundTubeCenterRef.current.x;
+            const gz = playerCollider.start.z - groundTubeCenterRef.current.z;
+            distToGroundTubeCenter = Math.sqrt(gx * gx + gz * gz);
+            const gActiveRadius = Math.max(2.0, Math.min(groundTubeRadiusRef.current, 10.0));
+
+            // Is near ground door?
+            const isGroundDoorway = groundDoorsRef.current.some(door => {
+              const doorPos = new THREE.Vector3();
+              door.mesh.getWorldPosition(doorPos);
+              return Math.abs(doorPos.y - playerCollider.start.y) < 5.0 &&
+                Math.sqrt(Math.pow(doorPos.x - playerCollider.start.x, 2) + Math.pow(doorPos.z - playerCollider.start.z, 2)) < 4.0;
+            });
+
+            if (!isGroundDoorway && isCurrentlyInGroundTube && distToGroundTubeCenter >= gActiveRadius - 0.2) {
+              // Clamp inside
+              const normalizeX = gx / distToGroundTubeCenter;
+              const normalizeZ = gz / distToGroundTubeCenter;
+              playerCollider.translate(new THREE.Vector3(
+                (normalizeX * (gActiveRadius - 0.2)) - gx,
+                0,
+                (normalizeZ * (gActiveRadius - 0.2)) - gz
+              ));
+            }
+          }
+
+          if (isCurrentlyInGroundTube) {
+            // Smoothly float to slightly ABOVE the spaceship 1st floor (Y=163.1)
+            // This ensures they cleanly pop out of the floor before the octree takes over.
+            const gTargetY = 163.1; // 150 + 13.1
+            const gDiff = gTargetY - playerCollider.start.y;
+            const gStepY = Math.sign(gDiff) * Math.min(Math.abs(gDiff), 25.0 * dt); // faster lift
+            playerCollider.translate(new THREE.Vector3(0, gStepY, 0));
+
+            // Set __PLAYER_ON_SPACESHIP__ when high enough
+            if (playerCollider.start.y > 140.0) {
+              (window as any).__PLAYER_ON_SPACESHIP__ = true;
+            }
           }
         }
 
@@ -1987,10 +2136,10 @@ export default function ARScene({ onExit }: ARSceneProps) {
         const bgColor = data ? (isSold ? 'rgba(255,0,0,0.1)' : 'rgba(255,170,0,0.1)') : 'transparent';
 
         return (
-          <div style={{ 
-            position: 'absolute', 
-            top: '50%', 
-            left: '50%', 
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
             transform: 'translate(-50%, -50%)',
             display: 'flex',
             width: '650px',
@@ -2048,13 +2197,13 @@ export default function ARScene({ onExit }: ARSceneProps) {
                     <h1 style={{ margin: '0 0 15px 0', fontSize: '2rem', letterSpacing: '3px', textShadow: '0 0 10px #00e5ff', textTransform: 'uppercase' }}>
                       {matchedShape} REGISTRY
                     </h1>
-                    
+
                     <div style={{ flex: 1, overflowY: 'auto', paddingRight: '10px' }}>
                       {shapeSlots.map((slot, idx) => (
-                        <div key={idx} style={{ 
-                          marginBottom: '15px', 
-                          padding: '10px', 
-                          backgroundColor: 'rgba(0, 229, 255, 0.05)', 
+                        <div key={idx} style={{
+                          marginBottom: '15px',
+                          padding: '10px',
+                          backgroundColor: 'rgba(0, 229, 255, 0.05)',
                           borderLeft: `2px solid ${slot.status === 'available' ? '#00e5ff' : '#ff4444'}`,
                           borderBottom: '1px solid rgba(0, 229, 255, 0.2)'
                         }}>
@@ -2062,7 +2211,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
                             <span style={{ fontWeight: 'bold', color: slot.status === 'available' ? '#00e5ff' : '#ff4444', letterSpacing: '1px' }}>{slot.nicheNum.toUpperCase()}</span>
                             <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>{slot.status === 'available' ? 'OPEN' : 'LOCKED'}</span>
                           </div>
-                          
+
                           {slot.status === 'available' ? (
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>Available for initialization</span>
@@ -2102,7 +2251,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
                       <img src="/imgs/akasha.jfif" alt="Niche Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'contrast(1.2) brightness(1.1)' }} />
                     ) : (
                       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 229, 255, 0.05)', color: '#00e5ff', fontSize: '0.8rem', letterSpacing: '1px', opacity: 0.5, textAlign: 'center', padding: '10px' }}>
-                        AWAITING<br/>ACQUISITION
+                        AWAITING<br />ACQUISITION
                       </div>
                     )}
                     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'linear-gradient(to bottom, rgba(0,229,255,0.1), transparent)' }}></div>
@@ -2116,14 +2265,14 @@ export default function ARScene({ onExit }: ARSceneProps) {
                 {/* Right Side: Data */}
                 <div style={{ flex: '1', display: 'flex', flexDirection: 'column' }}>
                   <h1 style={{ margin: '0 0 20px 0', fontSize: '2.5rem', letterSpacing: '5px', textShadow: '0 0 10px #00e5ff' }}>NFT</h1>
-                  
+
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px', fontSize: '0.9rem', letterSpacing: '1px' }}>
-                    
+
                     <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '5px' }}>
                       <span style={{ width: '100px', opacity: 0.7 }}>NAME</span>
                       <span style={{ fontWeight: 'bold' }}>{data.name}</span>
                     </div>
-                    
+
                     <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '5px' }}>
                       <span style={{ width: '100px', opacity: 0.7 }}>STATUS</span>
                       <span style={{ fontWeight: 'bold', textTransform: 'uppercase', color: isSold ? '#ff4444' : '#00e5ff' }}>{data.status}</span>
