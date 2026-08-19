@@ -544,6 +544,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
       setOccupiedMap(cache.assignments);
       setPhysicsLoading(false);
       setLoading(false);
+
+      createTVAndWall(spaceshipGroup!);
     } else {
       loader.load(
         '/models/spaceship.glb',
@@ -801,6 +803,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
           setPhysicsLoading(false);
           setLoading(false);
+
+          createTVAndWall(spaceshipGroup!);
         },
         (xhr) => {
           if (!isMounted) return;
@@ -893,8 +897,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
     };
 
     // --- ADD TV AND WALL ON 2ND FLOOR ---
-    const createTVAndWall = () => {
-      // 1. Create TV (Video Screen)
+    function createTVAndWall(spaceshipModel: THREE.Group) {
+      // 1. Create TV (Video Screen) - COMMENTED OUT AS REQUESTED
+      /*
       const video = document.createElement('video');
       video.src = '/video/034852EC-7326-4E59-8679-40F91ACEE98B.mov';
       video.crossOrigin = 'anonymous';
@@ -908,47 +913,63 @@ export default function ARScene({ onExit }: ARSceneProps) {
       const tvMesh = new THREE.Mesh(tvGeometry, tvMaterial);
       // tv material color
       (tvMesh.material as THREE.MeshBasicMaterial).color.setHex(0x111111);
-      tvMesh.position.set(-18.0, 183.0, 0);
+      tvMesh.position.set(-18.0, 187.0, 0);
       tvMesh.lookAt(0, 186.0, 0); // Face towards the center of the spaceship
-      tvMesh.scale.set(0.3, 0.3, 0.3);
+      tvMesh.scale.set(0.2, 0.2, 0.2);
       scene.add(tvMesh);
+      */
 
-      // Add a click listener to toggle mute (we'll implement this via raycaster if needed)
-      tvMesh.name = 'memorial_tv';
+      // We set muralY to exactly where the TV was (187.0)
+      const muralY = 183.0;
+      const height = 3.5;
+      const aspect = 16 / 9;
+      const width = height * aspect; // ~6.22 meters
 
-      // 2. Create Wall on the opposite side of the spaceship (X = 43)
-      const wallGeometry = new THREE.BoxGeometry(20, 15, 1);
-      const wallMaterial = new THREE.MeshStandardMaterial({
-        color: 0x444444, // Darker gray for better contrast with the images
-        side: THREE.DoubleSide,
-        roughness: 0.8
-      });
-      const wallMesh = new THREE.Mesh(wallGeometry, wallMaterial);
+      // To push the cylinder forward or backward, tweak this offsetX value.
+      // A positive value will push it along the +X axis, a negative along the -X axis.
+      const offsetX = -82.0;
+      const cx = 54.62 + offsetX;
+      const cz = 0;
 
-      // Position Wall opposite to TV (Flip the X axis)
-      // Moved UP by 2 meters to avoid clipping with the 3rd floor or railings!
-      wallMesh.position.set(-36.0, 185.0, 0); // +150
-      wallMesh.lookAt(0, 185.0, 0); // Face towards the center
-      wallMesh.scale.set(0.3, 0.3, 0.3);
-      scene.add(wallMesh);
+      // 1. Static dimensions as requested (no more dynamic raycasting)
+      const hitDistance = 9.8;
 
-      // Load NFT 3D Models on the Opposite Wall (X = +36.0)
-      const oppositeX = 36.0;
-      const floorY = 30.94; // 2nd Floor Y
+      console.error(`[NFT DEBUG] Using STATIC Room Radius: ${hitDistance}`);
 
-      // 1. Load Images (Tree, Stepping Stones, Statue) onto the Board (X = -36.0)
+      // We are inside looking OUT. 
+      // Wall is at hitDistance. Background should be slightly closer to us, murals slightly closer than background.
+      const R_bg = hitDistance - 0.1;
+      const R_mural = hitDistance - 0.5; // Push them slightly more inside to avoid any z-fighting with walls
+
+      const thetaLength = width / R_mural;
+      const fullCircle = Math.PI * 2;
+
+      console.error(`[NFT DEBUG] Generating FULL White BG Cylinder | Radius: ${R_bg} | Position: ${cx}, ${muralY}, ${cz}`);
+
+      // 2. Create the solid white background wall (Full Circle)
+      const bgGeometry = new THREE.CylinderGeometry(R_bg, R_bg, height + 0.5, 64, 1, true, 0, fullCircle);
+      const bgMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+      const bgMesh = new THREE.Mesh(bgGeometry, bgMaterial);
+      bgMesh.position.set(cx, muralY, cz);
+      scene.add(bgMesh);
+
+      // (Debug cube removed)
+
+      // 3. Load Images onto the Circular Wall
       const textureLoader = new THREE.TextureLoader();
 
-      const loadBoardImage = (url: string, yOffset: number, zOffset: number) => {
+      const addMural = (url: string, angleOffset: number) => {
+        console.error(`[NFT DEBUG] Requesting to load NFT: ${url} at angle offset: ${angleOffset}`);
         textureLoader.load(url, (texture) => {
+          console.error(`[NFT DEBUG] Successfully loaded texture: ${url}`);
           texture.colorSpace = THREE.SRGBColorSpace;
 
-          // Hardcode aspect ratio in case texture.image dimensions are not immediately available or wrong
-          const aspect = 16 / 9;
-          const height = 1.5; // Scaled down to 1.5m tall
-          const width = height * aspect;
+          // Flip the texture horizontally because we are looking at the INSIDE of the cylinder
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.repeat.x = -1;
 
-          const geometry = new THREE.PlaneGeometry(width, height);
+          // Create a perfectly curved segment for the image
+          const geometry = new THREE.CylinderGeometry(R_mural, R_mural, height, 32, 1, true, -thetaLength / 2, thetaLength);
           const material = new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
@@ -956,23 +977,22 @@ export default function ARScene({ onExit }: ARSceneProps) {
           });
 
           const mesh = new THREE.Mesh(geometry, material);
-          // Base Y is 185.0 (center of board)
-          mesh.position.set(-35.8, 185.0 + yOffset, zOffset);
-          mesh.lookAt(0, 185.0 + yOffset, zOffset);
+          mesh.position.set(cx, muralY, cz);
+          // Rotate the cylinder segment to place it around the room
+          mesh.rotation.y = angleOffset;
           scene.add(mesh);
+
+          console.error(`[NFT DEBUG] Added NFT mesh to scene: ${url} at Radius ${R_mural}`);
+        }, undefined, (err) => {
+          console.error(`[NFT DEBUG] FAILED to load texture: ${url}`, err);
         });
       };
 
-      // 2x2 Grid Layout
-      // Top Left
-      loadBoardImage('/imgs/tree.PNG', 1.0, -1.5);
-      // Top Right
-      loadBoardImage('/imgs/stepping stones.PNG', 1.0, 1.5);
-      // Bottom Center (Or Bottom Left)
-      loadBoardImage('/imgs/statue.PNG', -1.0, 0.0);
-    };
-
-    createTVAndWall();
+      // Place them evenly around the circular room (0, 120, 240 degrees)
+      addMural('/imgs/tree.PNG', 0); // Front
+      addMural('/imgs/stepping stones.PNG', (Math.PI * 2) / 3); // Left-ish
+      addMural('/imgs/statue.PNG', (Math.PI * 4) / 3); // Right-ish
+    }
 
     if (window.__SPACESHIP_CACHE__ && window.__SPACESHIP_CACHE__.guideGltf && window.__SPACESHIP_CACHE__.guideAnimations) {
       guideAnimationsData = window.__SPACESHIP_CACHE__.guideAnimations;
@@ -1714,8 +1734,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
           }
 
-          // Trigger Nun Greeting ONLY when they are within 5.0m of the Nun (Plays exactly once)
-          if (distToNun < 5.0 && !hasGreetedRef.current) {
+          // Trigger Nun Greeting ONLY when they are within 5.0m of the Nun and at least on her floor level
+          if (distToNun < 5.0 && camera.position.y >= (nunPos.y - 1.0) && !hasGreetedRef.current) {
 
             (window as any)._LOGGED_GREETING = true;
             hasGreetedRef.current = true;
