@@ -58,6 +58,8 @@ interface ARSceneProps {
 
 export default function ARScene({ onExit }: ARSceneProps) {
   const { data: session } = useSession();
+  const [fadeOpacity, setFadeOpacity] = useState(0);
+  const isFadingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const occupiedMapRef = useRef<Record<string, typeof DUMMY_PEOPLE[0]>>({});
 
@@ -634,14 +636,21 @@ export default function ARScene({ onExit }: ARSceneProps) {
               // Create Ground Tube under the Nun at (50.0, -2.0)
               const visualRadius = tubeRadiusRef.current * 4.0; // Make it significantly larger *4 as requested
               const tubeGeometry = new THREE.CylinderGeometry(visualRadius, visualRadius, 250, 32); // Extremely tall so it goes deep underground
-              const tubeMaterial = (child as THREE.Mesh).material;
+              const tubeMaterial = new THREE.MeshBasicMaterial({
+                color: 0xaee6ff, // Bright sci-fi cyan/white
+                transparent: true,
+                opacity: 0.5,
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide,
+                depthWrite: false
+              });
               const newTube = new THREE.Mesh(tubeGeometry, tubeMaterial);
 
-              // Center it under the Nun!
-              newTube.position.set(50.0, 25.0, -2.0); // Spans -100 to 150
+              // Center it exactly beneath the inner spaceship chamber
+              newTube.position.set(center.x, 25.0, center.z); // Spans -100 to 150 (perfectly touches the bottom of the spaceship at Y=150)
               groundElevatorGroup.add(newTube);
 
-              const groundCenter = new THREE.Vector3(50.0, 75.0, -2.0);
+              const groundCenter = new THREE.Vector3(center.x, 75.0, center.z);
               groundTubeCenterRef.current = groundCenter;
               // Make physical collision boundary match the 4x expanded visual boundary
               groundTubeRadiusRef.current = visualRadius;
@@ -2004,12 +2013,60 @@ export default function ARScene({ onExit }: ARSceneProps) {
           }
 
           if (isCurrentlyInGroundTube) {
-            // Smoothly float to slightly ABOVE the spaceship 1st floor (Y=163.1)
-            // This ensures they cleanly pop out of the floor before the octree takes over.
-            const gTargetY = 163.1; // 150 + 13.1
-            const gDiff = gTargetY - playerCollider.start.y;
-            const gStepY = Math.sign(gDiff) * Math.min(Math.abs(gDiff), 25.0 * dt); // faster lift
-            playerCollider.translate(new THREE.Vector3(0, gStepY, 0));
+            // Trigger transition earlier (below where the beam ends) so the view doesn't clip into the spaceship bottom
+            if (!isFadingRef.current && playerCollider.start.y > 135.0) {
+              isFadingRef.current = true;
+              
+              let opacity = 0;
+              const fadeInterval = setInterval(() => {
+                opacity += 0.1;
+                setFadeOpacity(opacity);
+                if (opacity >= 1.0) {
+                  clearInterval(fadeInterval);
+                  
+                  // Teleport in front of the Nun
+                  const targetY = 163.1;
+                  let targetX = 50.0;
+                  let targetZ = -2.0;
+                  
+                  if (window.__SPACESHIP_CACHE__?.guideOuterGroup) {
+                    targetX = window.__SPACESHIP_CACHE__.guideOuterGroup.position.x;
+                    targetZ = window.__SPACESHIP_CACHE__.guideOuterGroup.position.z + 3.0; // 3 meters in front of her
+                  }
+
+                  playerCollider.start.set(targetX, targetY, targetZ);
+                  playerCollider.end.set(targetX, targetY + 1.6, targetZ);
+
+                  // Try to face the Nun
+                  if (window.__SPACESHIP_CACHE__?.guideOuterGroup) {
+                    const nunPos = window.__SPACESHIP_CACHE__.guideOuterGroup.position.clone();
+                    nunPos.y = camera.position.y;
+                    camera.lookAt(nunPos);
+                  }
+
+                  // Fade back in after 0.5s holding black screen
+                  setTimeout(() => {
+                    let fadeOutOpacity = 1.0;
+                    const fadeOutInterval = setInterval(() => {
+                      fadeOutOpacity -= 0.1;
+                      setFadeOpacity(fadeOutOpacity);
+                      if (fadeOutOpacity <= 0) {
+                        clearInterval(fadeOutInterval);
+                        isFadingRef.current = false;
+                      }
+                    }, 50);
+                  }, 500); 
+                }
+              }, 50);
+            }
+
+            // Only float up if we aren't currently fading
+            if (!isFadingRef.current) {
+              const gTargetY = 163.1; 
+              const gDiff = gTargetY - playerCollider.start.y;
+              const gStepY = Math.sign(gDiff) * Math.min(Math.abs(gDiff), 25.0 * dt);
+              playerCollider.translate(new THREE.Vector3(0, gStepY, 0));
+            }
 
             // Set __PLAYER_ON_SPACESHIP__ when high enough
             if (playerCollider.start.y > 140.0) {
@@ -2458,6 +2515,19 @@ export default function ARScene({ onExit }: ARSceneProps) {
           </div>
         </div>
       )}
+
+      {/* Black Screen Fade Transition */}
+      <div 
+        style={{ 
+          position: 'absolute', 
+          top: 0, left: 0, width: '100%', height: '100%', 
+          backgroundColor: 'black', 
+          opacity: fadeOpacity, 
+          pointerEvents: 'none', 
+          zIndex: 9999, 
+          transition: 'opacity 0.1s linear' 
+        }} 
+      />
 
       {/* Exit Button */}
       <button
