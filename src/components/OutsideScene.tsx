@@ -577,19 +577,22 @@ export default function ARScene({ onExit }: ARSceneProps) {
               // If normal points mostly up/down, it's a floor or ceiling
               bool isFloor = abs(vWorldNormal.y) > 0.8;
               
-              if (isFloor || vWorldPos.y < 5.0) {
+              if (isFloor || vWorldPos.y < 155.0) {
                   roughnessFactor = 0.1;
                   metalnessFactor = 0.9;
                   customColor = vec3(0.2, 0.2, 0.2);
               } else {
                   // It's a wall
-                  if (vWorldPos.y > 17.0 && vWorldPos.y < 26.0) {
+                  if (vWorldPos.y > 167.0 && vWorldPos.y < 176.0) {
                       // First Floor Play Area (Matte Rainbow)
                       roughnessFactor = 0.9;
                       metalnessFactor = 0.0;
-                      float angle = atan(vWorldPos.x, vWorldPos.z);
+                      // Calculate the angle relative to the tube center (54.62, 0) since the spaceship is shifted!
+                      float dx = vWorldPos.x - 54.62;
+                      float dz = vWorldPos.z;
+                      float angle = atan(dx, dz);
                       customColor = vec3(0.5 + 0.5 * sin(angle * 10.0), 0.5 + 0.5 * sin(angle * 10.0 + 2.094), 0.5 + 0.5 * sin(angle * 10.0 + 4.188));
-                  } else if (vWorldPos.y >= 26.0) {
+                  } else if (vWorldPos.y >= 176.0) {
                       // Second Floor Theater (Matte Dark Purple)
                       roughnessFactor = 0.9;
                       metalnessFactor = 0.0;
