@@ -60,6 +60,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
   const { data: session } = useSession();
   const [fadeOpacity, setFadeOpacity] = useState(0);
   const isFadingRef = useRef(false);
+  const enteredFromGroundRef = useRef(false);
   const isMovementLockedRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const occupiedMapRef = useRef<Record<string, typeof DUMMY_PEOPLE[0]>>({});
@@ -2024,8 +2025,15 @@ export default function ARScene({ onExit }: ARSceneProps) {
           }
 
           if (isCurrentlyInGroundTube) {
+            // Track if player started from the ground, to avoid triggering transition when taking inner elevator DOWN
+            if (playerCollider.start.y < 50.0) {
+              enteredFromGroundRef.current = true;
+            } else if (playerCollider.start.y >= 160.0) {
+              enteredFromGroundRef.current = false;
+            }
+
             // Trigger transition earlier (below where the beam ends) so the view doesn't clip into the spaceship bottom
-            if (!isFadingRef.current && playerCollider.start.y > 130.0) {
+            if (!isFadingRef.current && playerCollider.start.y > 130.0 && enteredFromGroundRef.current) {
               isFadingRef.current = true;
               
               let opacity = 0;
