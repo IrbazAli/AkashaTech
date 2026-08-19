@@ -60,6 +60,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
   const { data: session } = useSession();
   const [fadeOpacity, setFadeOpacity] = useState(0);
   const isFadingRef = useRef(false);
+  const isMovementLockedRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const occupiedMapRef = useRef<Record<string, typeof DUMMY_PEOPLE[0]>>({});
 
@@ -140,6 +141,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
   };
 
   const handleNunOptionClick = (optionIndex: number) => {
+    isMovementLockedRef.current = false; // Unlock movement!
     setShowNunDialog(false);
     if (optionIndex === 0) {
       window.location.href = '/private-room';
@@ -290,6 +292,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
     // Keyboard Movement State
     const moveState = { forward: false, backward: false, left: false, right: false };
     const onKeyDown = (e: KeyboardEvent) => {
+      if (isMovementLockedRef.current) return;
       switch (e.code) {
         case 'KeyW': moveState.forward = true; break;
         case 'KeyA': moveState.left = true; break;
@@ -298,6 +301,13 @@ export default function ARScene({ onExit }: ARSceneProps) {
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
+      if (isMovementLockedRef.current) {
+        moveState.forward = false;
+        moveState.backward = false;
+        moveState.left = false;
+        moveState.right = false;
+        return;
+      }
       switch (e.code) {
         case 'KeyW': moveState.forward = false; break;
         case 'KeyA': moveState.left = false; break;
@@ -634,8 +644,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
               tubeRadiusRef.current = (box.max.x - box.min.x) / 2;
 
               // Create Ground Tube under the Nun at (50.0, -2.0)
-              const visualRadius = tubeRadiusRef.current * 4.0; // Make it significantly larger *4 as requested
-              const tubeGeometry = new THREE.CylinderGeometry(visualRadius, visualRadius, 250, 32); // Extremely tall so it goes deep underground
+              const visualRadius = tubeRadiusRef.current * 12.0; // Make it significantly larger *12 as requested
+              const radiusTop = tubeRadiusRef.current * 2.0; // Cone shape: much wider base, narrower at top
+              const tubeGeometry = new THREE.CylinderGeometry(radiusTop, visualRadius, 250, 32); // Extremely tall so it goes deep underground
               const tubeMaterial = new THREE.MeshBasicMaterial({
                 color: 0xaee6ff, // Bright sci-fi cyan/white
                 transparent: true,
@@ -2014,7 +2025,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
           if (isCurrentlyInGroundTube) {
             // Trigger transition earlier (below where the beam ends) so the view doesn't clip into the spaceship bottom
-            if (!isFadingRef.current && playerCollider.start.y > 135.0) {
+            if (!isFadingRef.current && playerCollider.start.y > 130.0) {
               isFadingRef.current = true;
               
               let opacity = 0;
@@ -2053,6 +2064,15 @@ export default function ARScene({ onExit }: ARSceneProps) {
                       if (fadeOutOpacity <= 0) {
                         clearInterval(fadeOutInterval);
                         isFadingRef.current = false;
+                        
+                        // Lock movement and free pointer
+                        isMovementLockedRef.current = true;
+                        controls.unlock();
+                        
+                        // Wait 5 seconds, then show popup
+                        setTimeout(() => {
+                          setShowNunDialog(true);
+                        }, 5000);
                       }
                     }, 50);
                   }, 500); 
