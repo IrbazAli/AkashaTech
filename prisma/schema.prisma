@@ -45,6 +45,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   niches        Niche[]
+  nfts          NFT[]
 }
 
 model VerificationToken {
@@ -63,4 +64,17 @@ model Niche {
   purchasedAt DateTime?
   
   owner       User?    @relation(fields: [ownerId], references: [id])
+}
+
+model NFT {
+  id          String   @id @default(cuid())
+  modelType   String   // 'statue', 'tree', etc.
+  ownerId     String
+  isPlaced    Boolean  @default(false)
+  x           Float?
+  y           Float?
+  z           Float?
+  createdAt   DateTime @default(now())
+  
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 }

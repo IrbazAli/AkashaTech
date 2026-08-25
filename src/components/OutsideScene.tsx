@@ -81,6 +81,10 @@ export default function ARScene({ onExit }: ARSceneProps) {
   const [searchPrompt, setSearchPrompt] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [guideMode, setGuideMode] = useState<'nun' | 'paw' | null>(null);
+  
+  const [selectedMuralToBuy, setSelectedMuralToBuy] = useState<string | null>(null);
+  const [showInventory, setShowInventory] = useState(false);
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const targetFloorYRef = useRef<number>(11.0); // 13.0 = Ground floor
 
   // Guide references
@@ -192,6 +196,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
   const groundTubeCenterRef = useRef<THREE.Vector3 | null>(null);
   const groundTubeRadiusRef = useRef<number>(0);
   const groundDoorsRef = useRef<{ mesh: THREE.Mesh, side: 'left' | 'right', initialZ: number, isOpen: boolean }[]>([]);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const activePlacementTargetRef = useRef<THREE.Group | null>(null);
 
   // Helper to sync ref and state
   const updateInTube = (val: boolean) => {
@@ -209,11 +216,13 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
     // 1. SETUP SCENE
     const scene = new THREE.Scene();
+    sceneRef.current = scene;
     scene.background = new THREE.Color(0x050508); // Dark atmospheric background
     // Fog disabled so the outside environment is fully visible
     // scene.fog = new THREE.FogExp2(0x050508, 0.015);
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    cameraRef.current = camera;
     // Spawn player inside the spaceship
     camera.position.set(120.0, 50.0, 40.0);
 
@@ -326,7 +335,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
     loader.setDRACOLoader(dracoLoader);
     loader.setMeshoptDecoder(MeshoptDecoder);
 
-    let activePlacementTarget: THREE.Group | null = null;
+    
     let spaceshipGroup: THREE.Group | null = null;
     let spaceshipMixer: THREE.AnimationMixer | null = null;
     let mainDoorActions: { action: THREE.AnimationAction, isOpen: boolean }[] = [];
@@ -381,8 +390,100 @@ export default function ARScene({ onExit }: ARSceneProps) {
         spaceshipGroup.updateMatrixWorld(true);
       }
 
-      // Load Statue and Tree 200 units away to improve FPS in main area
-      loader.load('/models/statue.glb', (statueGltf) => {
+      // Fetch and load NFTs
+      fetch('/api/nft').then(res => res.json()).then(nfts => {
+        if (!isMounted) return;
+        
+        // Add NFTs array to scene userData to track them easily
+        scene.userData.placedNfts = [];
+        
+        nfts.forEach(nft => {
+          if (!nft.isPlaced || nft.x == null) return;
+          
+          if (nft.modelType === 'statue') {
+            const loaderStatue = new GLTFLoader();
+            const dracoStatue = new DRACOLoader();
+            dracoStatue.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+            loaderStatue.setDRACOLoader(dracoStatue);
+            loaderStatue.setMeshoptDecoder(MeshoptDecoder);
+            loaderStatue.load('/models/statue.glb', (statueGltf: any) => {
+              const statue = statueGltf.scene;
+              const box = new THREE.Box3().setFromObject(statue);
+              const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
+              const scale = 25.0 / maxDim; 
+              statue.scale.set(scale, scale, scale);
+              const newBox = new THREE.Box3().setFromObject(statue);
+              const bottomOffset = newBox.min.y - statue.position.y;
+              statue.position.set(nft.x, nft.y, nft.z);
+              statue.userData.isDraggableNft = true;
+              statue.userData.bottomOffset = bottomOffset;
+              statue.userData.nftId = nft.id;
+              statue.userData.ownerId = nft.ownerId;
+              statue.userData.ownerName = nft.owner?.name || 'Unknown';
+              scene.add(statue);
+              scene.userData.placedNfts.push(statue);
+            });
+          } else if (nft.modelType === 'tree') {
+            const loaderTree = new GLTFLoader();
+            const dracoTree = new DRACOLoader();
+            dracoTree.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+            loaderTree.setDRACOLoader(dracoTree);
+            loaderTree.setMeshoptDecoder(MeshoptDecoder);
+            loaderTree.load('/models/grass-fountain.glb', (fountainGltf: any) => {
+              const fountain = fountainGltf.scene;
+              const fBox = new THREE.Box3().setFromObject(fountain);
+              const fSize = Math.max(fBox.getSize(new THREE.Vector3()).x, 1);
+              const fScale = 35.0 / fSize;
+              fountain.scale.set(fScale, fScale, fScale);
+              const newFBox = new THREE.Box3().setFromObject(fountain);
+              const bottomOffset = newFBox.min.y - fountain.position.y;
+              const nftTreeGroup = new THREE.Group();
+              nftTreeGroup.position.set(nft.x, nft.y, nft.z);
+              nftTreeGroup.userData.isDraggableNft = true;
+              nftTreeGroup.userData.bottomOffset = bottomOffset;
+              nftTreeGroup.userData.nftId = nft.id;
+              nftTreeGroup.userData.ownerId = nft.ownerId;
+              nftTreeGroup.userData.ownerName = nft.owner?.name || 'Unknown';
+              fountain.position.set(0, 0, 0);
+              fountain.traverse((child) => {
+                if (child.isMesh && child.material) {
+                  const name = child.name.toLowerCase();
+                  if (name.includes('grass') || name.includes('plane') || name.includes('ground') || name.includes('dirt')) {
+                    child.material = child.material.clone();
+                    child.material.color.setHex(0x3e4a30);
+                  }
+                }
+              });
+              nftTreeGroup.add(fountain);
+              scene.add(nftTreeGroup);
+              scene.userData.placedNfts.push(nftTreeGroup);
+              
+              loaderTree.load('/models/tree.glb', (treeGltf: any) => {
+                const tree = treeGltf.scene;
+                tree.traverse((child) => {
+                  if (child.isMesh && child.material && child.material.map) {
+                    child.material.transparent = false;
+                    child.material.alphaTest = 0.5;
+                    child.material.side = THREE.DoubleSide;
+                    if (child.material.color) child.material.color.setHex(0xffffff);
+                    child.material.needsUpdate = true;
+                  }
+                });
+                const box = new THREE.Box3().setFromObject(tree);
+                const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
+                const scale = 23.0 / maxDim;
+                tree.scale.set(scale, scale, scale);
+                tree.position.set(0, bottomOffset + 0.1, 0);
+                nftTreeGroup.add(tree);
+              });
+            });
+          }
+        });
+      });
+
+
+      // Hardcoded models removed. Using dynamic NFT fetching instead.
+      /*
         const statue = statueGltf.scene;
         const box = new THREE.Box3().setFromObject(statue);
         const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
@@ -485,6 +586,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           nftTreeGroup.add(tree);
         });
       });
+      */
 
 
 
@@ -1001,6 +1103,10 @@ export default function ARScene({ onExit }: ARSceneProps) {
           mesh.position.set(cx, muralY, cz);
           // Rotate the cylinder segment to place it around the room
           mesh.rotation.y = angleOffset;
+          
+          mesh.userData.isMural = true;
+          mesh.userData.muralType = url.includes('tree') ? 'tree' : 'statue';
+          
           scene.add(mesh);
 
           console.error(`[NFT DEBUG] Added NFT mesh to scene: ${url} at Radius ${R_mural}`);
@@ -1138,9 +1244,24 @@ export default function ARScene({ onExit }: ARSceneProps) {
       if (!controls.isLocked) return;
 
       // DROP LOGIC
-      if (activePlacementTarget) {
+      if (activePlacementTargetRef.current) {
         console.log("[NFT Placement] Dropped object.");
-        activePlacementTarget = null;
+        
+        // Save new coordinates to DB
+        if (activePlacementTargetRef.current.userData.nftId) {
+          fetch(`/api/nft/${activePlacementTargetRef.current.userData.nftId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              x: activePlacementTargetRef.current.position.x,
+              y: activePlacementTargetRef.current.position.y,
+              z: activePlacementTargetRef.current.position.z,
+              isPlaced: true
+            })
+          });
+        }
+        
+        activePlacementTargetRef.current = null;
         return;
       }
 
@@ -1152,6 +1273,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
         const name = i.object.name.toLowerCase();
         if (name.includes('room') || name.includes('gate') || name.includes('niche') || ['diamond', 'heart', 'star', 'square', 'spiral', 'sparil', 'cube'].some(s => name.includes(s))) return true;
 
+        if (i.object.userData.isMural) return true;
         let isNft = false;
         i.object.traverseAncestors((ancestor) => {
           if (ancestor.userData.isDraggableNft) isNft = true;
@@ -1190,9 +1312,27 @@ export default function ARScene({ onExit }: ARSceneProps) {
           if (ancestor.userData.isDraggableNft) nftRoot = ancestor;
         });
 
+        if (object.userData.isMural) {
+          if (!session?.user?.email) {
+            alert("You must be logged in to claim this NFT!");
+            return;
+          }
+          setSelectedMuralToBuy(object.userData.muralType);
+          if (isMovementLockedRef.current && document.pointerLockElement) {
+             document.exitPointerLock();
+          }
+          return;
+        }
+
         if (nftRoot) {
+          const isOwner = session?.user?.id === nftRoot.userData.ownerId;
+          const isAdmin = session?.user?.role === "ADMIN";
+          if (!isOwner && !isAdmin && session?.user?.id) {
+             console.log("Only owner or admin can move this NFT!");
+             return;
+          }
           console.log("[NFT Placement] Picked up object.");
-          activePlacementTarget = nftRoot;
+          activePlacementTargetRef.current = nftRoot;
           return; // Consume click
         }
 
@@ -1293,22 +1433,80 @@ export default function ARScene({ onExit }: ARSceneProps) {
     renderer.setAnimationLoop(() => {
       if (!isMounted) return;
 
+      // NFT NAMEPLATE LOGIC
+      const nameplate = document.getElementById('nft-nameplate');
+      if (nameplate && scene.userData.placedNfts) {
+        let closestNft = null;
+        let minDistance = 30.0; // 30 meters threshold
+
+        scene.userData.placedNfts.forEach((nft) => {
+          // Calculate distance
+          const dist = camera.position.distanceTo(nft.position);
+          if (dist < minDistance) {
+            // Calculate if looking at it
+            const nftDir = new THREE.Vector3().subVectors(nft.position, camera.position).normalize();
+            const camDir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+            const dot = camDir.dot(nftDir);
+            
+            // If roughly looking towards it (dot product > 0.8)
+            if (dot > 0.8) {
+              minDistance = dist;
+              closestNft = nft;
+            }
+          }
+        });
+
+        if (closestNft && !activePlacementTargetRef.current) {
+          // Project 3D position to 2D screen
+          const screenPos = closestNft.position.clone();
+          screenPos.y += (closestNft.userData.bottomOffset || 0) + 5.0; // Place above the model
+          screenPos.project(camera);
+          
+          const x = (screenPos.x *  .5 + .5) * window.innerWidth;
+          const y = (screenPos.y * -.5 + .5) * window.innerHeight;
+          
+          nameplate.style.display = 'block';
+          nameplate.style.left = `${x}px`;
+          nameplate.style.top = `${y}px`;
+          nameplate.textContent = `Owner: ${closestNft.userData.ownerName}`;
+        } else {
+          nameplate.style.display = 'none';
+        }
+      }
+
       // NFT PLACEMENT LOGIC
-      if (activePlacementTarget) {
+      if (activePlacementTargetRef.current) {
         const placementRaycaster = new THREE.Raycaster();
         placementRaycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
 
-        if (envGroup) {
-          const intersects = placementRaycaster.intersectObject(envGroup, true);
+        const grassMesh = scene.getObjectByName('Grass_Material001_0');
+        const intersectTargets = [envGroup, grassMesh].filter(Boolean) as THREE.Object3D[];
+        
+        if (intersectTargets.length > 0) {
+          const intersects = placementRaycaster.intersectObjects(intersectTargets, true);
           if (intersects.length > 0) {
             const hit = intersects[0];
             // Set X and Z to the hit point
-            activePlacementTarget.position.x = hit.point.x;
-            activePlacementTarget.position.z = hit.point.z;
+            activePlacementTargetRef.current.position.x = hit.point.x;
+            activePlacementTargetRef.current.position.z = hit.point.z;
 
             // Set Y exactly on the ground based on bottomOffset
-            const offset = activePlacementTarget.userData.bottomOffset || 0;
-            activePlacementTarget.position.y = hit.point.y - offset;
+            const offset = activePlacementTargetRef.current.userData.bottomOffset || 0;
+            activePlacementTargetRef.current.position.y = hit.point.y - offset;
+          } else {
+            // Keep at fixed distance but snap Y to ground using downward raycast
+            const dir = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+            dir.y = 0; dir.normalize();
+            const targetPos = camera.position.clone().add(dir.multiplyScalar(10));
+            activePlacementTargetRef.current.position.x = targetPos.x;
+            activePlacementTargetRef.current.position.z = targetPos.z;
+            
+            const downRay = new THREE.Raycaster(new THREE.Vector3(targetPos.x, 1000, targetPos.z), new THREE.Vector3(0, -1, 0));
+            const downHits = downRay.intersectObject(envGroup, true);
+            const groundY = downHits.length > 0 ? downHits[0].point.y : 0;
+            
+            const offset = activePlacementTargetRef.current.userData.bottomOffset || 0;
+            activePlacementTargetRef.current.position.y = groundY - offset;
           }
         }
       }
@@ -2136,6 +2334,29 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      {/* NFT Nameplate DOM Overlay */}
+      <div 
+        id="nft-nameplate" 
+        style={{
+          display: 'none',
+          position: 'absolute',
+          transform: 'translate(-50%, -50%)',
+          background: 'rgba(5, 11, 20, 0.8)',
+          border: '1px solid #22d3ee',
+          padding: '8px 16px',
+          borderRadius: '4px',
+          color: '#22d3ee',
+          fontWeight: 'bold',
+          letterSpacing: '1px',
+          pointerEvents: 'none',
+          zIndex: 100,
+          boxShadow: '0 0 10px rgba(34, 211, 238, 0.3)',
+          backdropFilter: 'blur(4px)'
+        }}
+      >
+        Owner: Unknown
+      </div>
+      
       {/* 3D Canvas Container */}
       <div ref={containerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} />
 
@@ -2556,6 +2777,216 @@ export default function ARScene({ onExit }: ARSceneProps) {
           transition: 'opacity 0.1s linear' 
         }} 
       />
+
+      {/* Purchase NFT Confirmation Overlay */}
+      {selectedMuralToBuy && (
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          backgroundColor: 'rgba(10, 10, 15, 0.95)', border: '2px solid #00aaff', padding: '30px',
+          borderRadius: '12px', zIndex: 100, color: 'white', width: '350px', textAlign: 'center',
+          boxShadow: '0 0 20px rgba(0, 170, 255, 0.3)'
+        }}>
+          <h2 style={{ color: '#00aaff', marginBottom: '10px' }}>Purchase NFT</h2>
+          <p style={{ marginBottom: '20px', fontSize: '0.9rem', color: '#ccc' }}>
+            Would you like to add the <strong>{selectedMuralToBuy}</strong> to your bag?
+          </p>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <button onClick={() => {
+              fetch('/api/nft', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ modelType: selectedMuralToBuy })
+              }).then(res => res.json()).then(data => {
+                if (data.error) alert(data.error);
+                else {
+                  alert("Added to bag!");
+                  setSelectedMuralToBuy(null);
+                }
+              });
+            }} style={{ padding: '10px 20px', backgroundColor: '#00aaff', border: 'none', color: 'black', fontWeight: 'bold', borderRadius: '5px', cursor: 'pointer' }}>Add to Bag</button>
+            <button onClick={() => setSelectedMuralToBuy(null)} style={{ padding: '10px 20px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Inventory / Bag Button */}
+      {!loading && !showNunDialog && !inTube && (
+        <button
+          onClick={() => {
+            if (isMovementLockedRef.current && document.pointerLockElement) {
+              document.exitPointerLock();
+            }
+            setShowInventory(true);
+            if (session?.user?.id) {
+              fetch(`/api/nft?unplaced=true&ownerId=${session.user.id}`)
+                .then(res => res.json())
+                .then(data => {
+                  let items = data || [];
+                  if (activePlacementTargetRef.current && activePlacementTargetRef.current.userData?.nftId) {
+                    // @ts-ignore
+                    items = items.filter((i: any) => i.id !== activePlacementTargetRef.current.userData.nftId);
+                  }
+                  setInventoryItems(items);
+                });
+            }
+          }}
+          style={{
+            position: 'absolute', bottom: '20px', right: '20px', zIndex: 10, padding: '12px 24px',
+            backgroundColor: '#d4af37', color: 'black', fontWeight: 'bold', border: 'none',
+            borderRadius: '5px', cursor: 'pointer', boxShadow: '0 0 10px rgba(212, 175, 55, 0.5)'
+          }}
+        >
+          Open Bag 🎒
+        </button>
+      )}
+
+      {/* Inventory Modal */}
+      {showInventory && (
+        <div style={{
+          position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          backgroundColor: 'rgba(10, 10, 15, 0.95)', border: '2px solid #d4af37', padding: '30px',
+          borderRadius: '12px', zIndex: 100, color: 'white', width: '400px', minHeight: '300px',
+          boxShadow: '0 0 20px rgba(212, 175, 55, 0.3)', display: 'flex', flexDirection: 'column'
+        }}>
+          <h2 style={{ color: '#d4af37', marginBottom: '20px', borderBottom: '1px solid #444', paddingBottom: '10px' }}>Your Bag</h2>
+          <div style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
+            {inventoryItems.length === 0 ? (
+              <p style={{ color: '#ccc', textAlign: 'center', marginTop: '50px' }}>Your bag is empty.</p>
+            ) : (
+              inventoryItems.map(item => (
+                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', backgroundColor: 'rgba(255,255,255,0.05)', marginBottom: '10px', borderRadius: '5px' }}>
+                  <span style={{ textTransform: 'capitalize' }}>{item.modelType}</span>
+                  <button 
+                    onClick={() => {
+                      console.error(`[NFT PLACEMENT LOG] Clicked Place for item: ${item.modelType} (ID: ${item.id})`);
+                      setShowInventory(false);
+                      setInventoryItems(prev => prev.filter(i => i.id !== item.id));
+                      // Spawn logic
+                      const modelUrl = item.modelType === 'statue' ? '/models/statue.glb' : '/models/grass-fountain.glb';
+                      console.error(`[NFT PLACEMENT LOG] Resolved model URL: ${modelUrl}`);
+                      
+                      try {
+                        // @ts-ignore
+                        const loader = new GLTFLoader();
+                        const draco = new DRACOLoader();
+                        draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+                        loader.setDRACOLoader(draco);
+                        loader.setMeshoptDecoder(MeshoptDecoder);
+                        
+                        console.error(`[NFT PLACEMENT LOG] Calling loader.load...`);
+                        loader.load(modelUrl, (gltf: any) => {
+                           console.error(`[NFT PLACEMENT LOG] Loader successfully loaded GLTF!`);
+                           try {
+                             const model = gltf.scene;
+                             let rootObj = model;
+                             
+                             const box = new THREE.Box3().setFromObject(model);
+                             const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
+                             const scale = item.modelType === 'statue' ? (32.0 / maxDim) : (24.0 / maxDim);
+                             model.scale.set(scale, scale, scale);
+                             model.updateMatrixWorld(true);
+                             
+                             const scaledBox = new THREE.Box3().setFromObject(model);
+                             let bottomOffset = scaledBox.min.y - model.position.y;
+                             let topOffset = scaledBox.max.y - model.position.y;
+                             
+                             if (item.modelType === 'tree') {
+                                console.error(`[NFT PLACEMENT LOG] Constructing complex tree group...`);
+                                const nftTreeGroup = new THREE.Group();
+                                model.position.set(0, 0, 0);
+                                
+                                model.traverse((child: any) => {
+                                  if (child.isMesh && child.material) {
+                                    const name = child.name.toLowerCase();
+                                    if (name.includes('grass') || name.includes('plane') || name.includes('ground') || name.includes('dirt')) {
+                                      child.material = child.material.clone();
+                                      child.material.color.setHex(0x3e4a30);
+                                    }
+                                  }
+                                });
+                                
+                                nftTreeGroup.add(model);
+                                
+                                loader.load('/models/tree.glb', (treeGltf: any) => {
+                                  console.error(`[NFT PLACEMENT LOG] Successfully loaded inner tree.glb`);
+                                  const innerTree = treeGltf.scene;
+                                  innerTree.traverse((child: any) => {
+                                    if (child.isMesh && child.material && child.material.map) {
+                                      child.material.transparent = false;
+                                      child.material.alphaTest = 0.5;
+                                      child.material.side = THREE.DoubleSide;
+                                      if (child.material.color) child.material.color.setHex(0xffffff);
+                                      child.material.needsUpdate = true;
+                                    }
+                                  });
+                                  const tBox = new THREE.Box3().setFromObject(innerTree);
+                                  const tMaxDim = Math.max(tBox.getSize(new THREE.Vector3()).y, 1);
+                                  const tScale = 45.0 / tMaxDim;
+                                  innerTree.scale.set(tScale, tScale, tScale);
+                                  innerTree.position.set(0, topOffset, 0);
+                                  nftTreeGroup.add(innerTree);
+                                }, undefined, (err: any) => {
+                                  console.error(`[NFT PLACEMENT LOG ERROR] Failed to load inner tree.glb:`, err);
+                                });
+                                rootObj = nftTreeGroup;
+                             }
+
+                             console.error(`[NFT PLACEMENT LOG] Positioning model in front of camera...`);
+                             const cam = cameraRef.current;
+                             const scn = sceneRef.current;
+                             if (!cam || !scn) {
+                               console.error(`[NFT PLACEMENT LOG ERROR] Camera or Scene ref is null!`);
+                               return;
+                             }
+                             const dir = new THREE.Vector3(0,0,-1).applyQuaternion(cam.quaternion);
+                             dir.y = 0; dir.normalize();
+                             const spawnPos = cam.position.clone().add(dir.multiplyScalar(10));
+                             
+                             let groundY = 0;
+                             const envGrp = scn.getObjectByName('CityEnvironment');
+                             if (envGrp) {
+                               const downRay = new THREE.Raycaster(new THREE.Vector3(spawnPos.x, 1000, spawnPos.z), new THREE.Vector3(0, -1, 0));
+                               const hits = downRay.intersectObject(envGrp, true);
+                               if (hits.length > 0) groundY = hits[0].point.y;
+                             }
+                             
+                             rootObj.position.set(spawnPos.x, groundY - bottomOffset, spawnPos.z);
+                             rootObj.userData.isDraggableNft = true;
+                             rootObj.userData.bottomOffset = bottomOffset;
+                             rootObj.userData.nftId = item.id;
+                             rootObj.userData.ownerId = item.ownerId;
+                             // @ts-ignore
+                             rootObj.userData.ownerName = session?.user?.name || 'Unknown';
+                             
+                             console.error(`[NFT PLACEMENT LOG] Adding to scene...`);
+                             scn.add(rootObj);
+                             
+                             if (!scn.userData.placedNfts) scn.userData.placedNfts = [];
+                             scn.userData.placedNfts.push(rootObj);
+                             
+                             activePlacementTargetRef.current = rootObj;
+                             console.error(`[NFT PLACEMENT LOG] activePlacementTargetRef.current set successfully! Model should be following cursor.`);
+                           } catch (err: any) {
+                             console.error(`[NFT PLACEMENT LOG ERROR] Error processing loaded GLTF:`, err);
+                           }
+                        }, undefined, (err: any) => {
+                           console.error(`[NFT PLACEMENT LOG ERROR] loader.load failed:`, err);
+                        });
+                      } catch (err: any) {
+                        console.error(`[NFT PLACEMENT LOG ERROR] Error initializing loader:`, err);
+                      }
+                    }}
+                    style={{ padding: '5px 15px', backgroundColor: '#d4af37', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    Place
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+          <button onClick={() => setShowInventory(false)} style={{ padding: '10px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer' }}>Close</button>
+        </div>
+      )}
 
       {/* Exit Button */}
       <button
