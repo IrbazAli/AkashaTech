@@ -1,5 +1,6 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "./prisma";
 
@@ -8,36 +9,32 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
+  pages: {
+    signIn: "/login",
+  },
   providers: [
-    // Dummy credential provider for MVP
     CredentialsProvider({
-      name: "Guest or Premium Account",
+      name: "Email and Password",
       credentials: {
-        username: { label: "Username (Type 'guest', 'user', or 'premium')", type: "text", placeholder: "guest" },
+        email: { label: "Email", type: "email", placeholder: "user@example.com" },
+        password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.username) return null;
+        if (!credentials?.email || !credentials?.password) return null;
         
-        let role = "GUEST";
-        let email = "guest@example.com";
-        if (credentials.username.toLowerCase() === "premium") {
-          role = "PREMIUM";
-          email = "premium@example.com";
-        } else if (credentials.username.toLowerCase() === "user") {
-          role = "USER";
-          email = "user@example.com";
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email }
+        });
+
+        if (!user || !user.password) {
+          return null;
         }
 
-        // Upsert user for MVP test purposes
-        const user = await prisma.user.upsert({
-          where: { email },
-          update: { role },
-          create: {
-            email,
-            name: credentials.username,
-            role,
-          },
-        });
+        const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
+
+        if (!isPasswordValid) {
+          return null;
+        }
 
         return { id: user.id, name: user.name, email: user.email, role: user.role };
       }

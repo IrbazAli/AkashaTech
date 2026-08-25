@@ -39,6 +39,7 @@ model User {
   name          String?
   email         String?   @unique
   emailVerified DateTime?
+  password      String?
   image         String?
   role          String    @default("USER") // Roles: USER, PREMIUM
   accounts      Account[]
