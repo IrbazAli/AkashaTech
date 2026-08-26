@@ -2356,7 +2356,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
                   clearInterval(fadeInterval);
                   
                   // Teleport in front of the Nun
-                  const targetY = 163.1;
+                  const targetY = 163.5;
                   let targetX = 50.0;
                   let targetZ = -2.0;
                   
@@ -2596,262 +2596,127 @@ export default function ARScene({ onExit }: ARSceneProps) {
       )}
 
       {/* Hologram UI Overlay */}
-      {selectedNiche && (() => {
-        const data = occupiedMap[selectedNiche];
-        const isSold = data && (data.status === 'occupied' || data.status === 'SOLD' || data.status === 'sold');
-        const color = data ? (isSold ? '#ff4444' : '#ffaa00') : '#00ffcc';
-        const bgColor = data ? (isSold ? 'rgba(255,0,0,0.1)' : 'rgba(255,170,0,0.1)') : 'transparent';
+      <div style={{ display: selectedNiche ? 'block' : 'none', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 50 }}>
+        {(() => {
+          const data = selectedNiche ? occupiedMap[selectedNiche] : null;
+          const isSold = data && (data.status === 'occupied' || data.status === 'SOLD' || data.status === 'sold');
+          const color = data ? (isSold ? '#ff4444' : '#ffaa00') : '#00ffcc';
+          const bgColor = data ? (isSold ? 'rgba(255,0,0,0.1)' : 'rgba(255,170,0,0.1)') : 'transparent';
 
-        return (
-          <div style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            display: 'flex',
-            width: '650px',
-            background: 'rgba(0, 30, 45, 0.75)',
-            backdropFilter: 'blur(8px)',
-            border: '2px solid #00e5ff',
-            boxShadow: '0 0 20px rgba(0, 229, 255, 0.5), inset 0 0 20px rgba(0, 229, 255, 0.2)',
-            borderRadius: '8px',
-            padding: '25px',
-            color: '#00e5ff',
-            fontFamily: '"Courier New", Courier, monospace',
-            zIndex: 10,
-            pointerEvents: 'auto'
-          }}>
-            {/* Corner Accents */}
-            <div style={{ position: 'absolute', top: -2, left: -2, width: '20px', height: '20px', borderTop: '4px solid #00e5ff', borderLeft: '4px solid #00e5ff' }}></div>
-            <div style={{ position: 'absolute', top: -2, right: -2, width: '20px', height: '20px', borderTop: '4px solid #00e5ff', borderRight: '4px solid #00e5ff' }}></div>
-            <div style={{ position: 'absolute', bottom: -2, left: -2, width: '20px', height: '20px', borderBottom: '4px solid #00e5ff', borderLeft: '4px solid #00e5ff' }}></div>
-            <div style={{ position: 'absolute', bottom: -2, right: -2, width: '20px', height: '20px', borderBottom: '4px solid #00e5ff', borderRight: '4px solid #00e5ff' }}></div>
+          return (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              display: 'flex',
+              width: '650px',
+              background: 'rgba(0, 30, 45, 0.75)',
+              backdropFilter: 'blur(8px)',
+              border: `2px solid ${color}`,
+              boxShadow: `0 0 30px rgba(0, 229, 255, 0.2), inset 0 0 20px rgba(0, 229, 255, 0.1)`,
+              borderRadius: '16px',
+              padding: '25px',
+              color: 'white',
+              pointerEvents: 'auto',
+              transition: 'all 0.3s ease-out'
+            }}>
+              {/* Close Button */}
+              <button 
+                onClick={() => setSelectedNiche(null)}
+                style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '15px',
+                  background: 'transparent',
+                  border: 'none',
+                  color: color,
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  textShadow: `0 0 10px ${color}`
+                }}
+              >×</button>
 
-            <button onClick={() => {
-              setSelectedNiche(null);
-              if (typeof guideMode !== 'undefined' && guideMode === 'nun') {
-                setNunTargetNiche('RETURN');
-              }
-            }} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#00e5ff', cursor: 'pointer', fontSize: '1.5rem', fontWeight: 'bold', zIndex: 20 }}>✕</button>
-
-            {['diamond', 'heart', 'star', 'square', 'spiral', 'sparil', 'cube'].find(s => selectedNiche.toLowerCase().includes(s)) ? (() => {
-              let matchedShape = ['diamond', 'heart', 'star', 'square', 'spiral', 'sparil', 'cube'].find(s => selectedNiche.toLowerCase().includes(s))!;
-              if (matchedShape === 'sparil') matchedShape = 'spiral';
-              if (matchedShape === 'cube') matchedShape = 'square';
-              const shapeSlots = typeof DUMMY_SHAPE_SLOTS !== 'undefined' ? (DUMMY_SHAPE_SLOTS[matchedShape] || []) : [];
-              return (
-                <div style={{ display: 'flex', width: '100%', maxHeight: '450px' }}>
-                  {/* Left Side: Image */}
-                  <div style={{ flex: '0 0 200px', display: 'flex', flexDirection: 'column', alignItems: 'center', marginRight: '30px' }}>
-                    <div style={{
-                      width: '180px',
-                      height: '240px',
-                      border: '2px solid #00e5ff',
-                      boxShadow: '0 0 15px rgba(0, 229, 255, 0.4)',
-                      overflow: 'hidden',
-                      position: 'relative'
-                    }}>
-                      <img src="/imgs/akasha.jfif" alt="Shape Package" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'contrast(1.2) brightness(1.1)' }} />
-                      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'linear-gradient(to bottom, rgba(0,229,255,0.1), transparent)' }}></div>
+              {(() => {
+                let matchedShape = Object.keys(DUMMY_SHAPE_SLOTS).find(shape => selectedNiche && selectedNiche.includes(shape)) || 'diamond';
+                if (matchedShape === 'cube') matchedShape = 'square';
+                const shapeSlots = typeof DUMMY_SHAPE_SLOTS !== 'undefined' ? (DUMMY_SHAPE_SLOTS[matchedShape] || []) : [];
+                return (
+                  <div style={{ display: 'flex', width: '100%', maxHeight: '450px' }}>
+                    {/* Left Side: Image */}
+                    <div style={{ flex: '0 0 200px', display: 'flex', flexDirection: 'column', alignItems: 'center', marginRight: '30px' }}>
+                      <div style={{
+                        width: '180px',
+                        height: '240px',
+                        border: `2px solid ${color}`,
+                        boxShadow: `0 0 15px ${bgColor}`,
+                        overflow: 'hidden',
+                        position: 'relative'
+                      }}>
+                        <img src={`https://picsum.photos/seed/${selectedNiche || 'default'}/200/300`} alt="Portrait" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </div>
+                      <h3 style={{ marginTop: '15px', fontSize: '20px', color: '#fff', textShadow: `0 0 10px ${color}` }}>
+                        {data ? data.name : "Unoccupied"}
+                      </h3>
+                      <p style={{ margin: '5px 0', fontSize: '14px', color: '#aaa' }}>{selectedNiche}</p>
                     </div>
-                    <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '0.8rem', letterSpacing: '2px' }}>
-                      <p style={{ margin: '0 0 5px 0', textTransform: 'uppercase', fontWeight: 'bold' }}>{matchedShape} PKG</p>
-                      <p style={{ margin: 0, opacity: 0.7 }}>CAPACITY // 10</p>
-                    </div>
-                  </div>
 
-                  {/* Right Side: Data */}
-                  <div style={{ flex: '1', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <h1 style={{ margin: '0 0 15px 0', fontSize: '2rem', letterSpacing: '3px', textShadow: '0 0 10px #00e5ff', textTransform: 'uppercase' }}>
-                      {matchedShape} REGISTRY
-                    </h1>
-
-                    <div style={{ flex: 1, overflowY: 'auto', paddingRight: '10px' }}>
-                      {shapeSlots.map((slot, idx) => (
-                        <div key={idx} style={{
-                          marginBottom: '15px',
-                          padding: '10px',
-                          backgroundColor: 'rgba(0, 229, 255, 0.05)',
-                          borderLeft: `2px solid ${slot.status === 'available' ? '#00e5ff' : '#ff4444'}`,
-                          borderBottom: '1px solid rgba(0, 229, 255, 0.2)'
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
-                            <span style={{ fontWeight: 'bold', color: slot.status === 'available' ? '#00e5ff' : '#ff4444', letterSpacing: '1px' }}>{slot.nicheNum.toUpperCase()}</span>
-                            <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>{slot.status === 'available' ? 'OPEN' : 'LOCKED'}</span>
-                          </div>
-
-                          {slot.status === 'available' ? (
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>Available for initialization</span>
-                              <button style={{ padding: '4px 8px', backgroundColor: 'transparent', color: '#00e5ff', border: '1px solid #00e5ff', fontSize: '0.7rem', cursor: 'pointer' }}>ACQUIRE</button>
-                            </div>
-                          ) : (
-                            <div style={{ fontSize: '0.8rem' }}>
-                              <div style={{ display: 'flex', marginBottom: '3px' }}>
-                                <span style={{ width: '70px', opacity: 0.7 }}>USER:</span>
-                                <span>{slot.name}</span>
-                              </div>
-                              <div style={{ display: 'flex' }}>
-                                <span style={{ width: '70px', opacity: 0.7 }}>DATA:</span>
-                                <span style={{ opacity: 0.8 }}>"{slot.message}"</span>
-                              </div>
-                            </div>
+                    {/* Right Side: Info & Slots */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', paddingRight: '10px' }}>
+                      
+                      <div style={{ background: 'rgba(0,0,0,0.4)', padding: '15px', borderRadius: '8px', marginBottom: '15px', border: '1px solid rgba(0, 229, 255, 0.2)' }}>
+                        <h4 style={{ color: color, margin: '0 0 10px 0', borderBottom: `1px solid ${color}`, paddingBottom: '5px' }}>Status</h4>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '18px', fontWeight: 'bold', color: isSold ? '#ff4444' : '#00ffcc' }}>
+                            {data ? data.status.toUpperCase() : "AVAILABLE"}
+                          </span>
+                          {!isSold && (
+                            <button style={{
+                              padding: '8px 16px',
+                              background: 'linear-gradient(90deg, #00ffcc, #0088ff)',
+                              border: 'none',
+                              borderRadius: '20px',
+                              color: 'white',
+                              fontWeight: 'bold',
+                              cursor: 'pointer',
+                              boxShadow: '0 0 10px rgba(0, 229, 255, 0.5)'
+                            }}>Purchase Niche</button>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })() : data ? (
-              <div style={{ display: 'flex', width: '100%' }}>
-                {/* Left Side: Image */}
-                <div style={{ flex: '0 0 200px', display: 'flex', flexDirection: 'column', alignItems: 'center', marginRight: '30px' }}>
-                  <div style={{
-                    width: '180px',
-                    height: '240px',
-                    border: '2px solid #00e5ff',
-                    boxShadow: '0 0 15px rgba(0, 229, 255, 0.4)',
-                    overflow: 'hidden',
-                    position: 'relative'
-                  }}>
-                    {isSold ? (
-                      <img src="/imgs/akasha.jfif" alt="Niche Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'contrast(1.2) brightness(1.1)' }} />
-                    ) : (
-                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 229, 255, 0.05)', color: '#00e5ff', fontSize: '0.8rem', letterSpacing: '1px', opacity: 0.5, textAlign: 'center', padding: '10px' }}>
-                        AWAITING<br />ACQUISITION
                       </div>
-                    )}
-                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'linear-gradient(to bottom, rgba(0,229,255,0.1), transparent)' }}></div>
-                  </div>
-                  <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '0.8rem', letterSpacing: '2px' }}>
-                    <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>{data.name.toUpperCase()}</p>
-                    <p style={{ margin: 0, opacity: 0.7 }}>ID // {selectedNiche.toUpperCase()}</p>
-                  </div>
-                </div>
 
-                {/* Right Side: Data */}
-                <div style={{ flex: '1', display: 'flex', flexDirection: 'column' }}>
-                  <h1 style={{ margin: '0 0 20px 0', fontSize: '2.5rem', letterSpacing: '5px', textShadow: '0 0 10px #00e5ff' }}>NFT</h1>
-
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px', fontSize: '0.9rem', letterSpacing: '1px' }}>
-
-                    <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '5px' }}>
-                      <span style={{ width: '100px', opacity: 0.7 }}>NAME</span>
-                      <span style={{ fontWeight: 'bold' }}>{data.name}</span>
-                    </div>
-
-                    <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '5px' }}>
-                      <span style={{ width: '100px', opacity: 0.7 }}>STATUS</span>
-                      <span style={{ fontWeight: 'bold', textTransform: 'uppercase', color: isSold ? '#ff4444' : '#00e5ff' }}>{data.status}</span>
-                    </div>
-
-                    {(data.dob || data.dod) && (
-                      <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '5px' }}>
-                        <span style={{ width: '100px', opacity: 0.7 }}>TIMELINE</span>
-                        <span style={{ fontWeight: 'bold' }}>{data.dob} // {data.dod}</span>
+                      {/* Slots Details */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        {shapeSlots.map((slot, idx) => {
+                          const isSlotOccupied = data && Object.values(data).includes(slot.meshId);
+                          return (
+                            <div key={idx} style={{
+                              background: isSlotOccupied ? 'rgba(0,255,200,0.1)' : 'rgba(255,255,255,0.05)',
+                              border: `1px solid ${isSlotOccupied ? '#00ffcc' : '#333'}`,
+                              padding: '10px',
+                              borderRadius: '6px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              transition: 'all 0.2s'
+                            }}>
+                              <span style={{ fontSize: '12px', color: '#888', marginBottom: '5px' }}>{slot.meshId}</span>
+                              <span style={{ fontSize: '14px', color: isSlotOccupied ? '#fff' : '#555', fontWeight: 'bold' }}>
+                                {isSlotOccupied ? "Item Placed" : "Empty Slot"}
+                              </span>
+                            </div>
+                          )
+                        })}
                       </div>
-                    )}
-
-                    <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '5px' }}>
-                      <span style={{ width: '100px', opacity: 0.7 }}>DATA</span>
-                      <span style={{ fontWeight: 'bold', flex: 1 }}>{data.message || (isSold ? 'RESTRICTED' : 'NO DATA')}</span>
                     </div>
-
                   </div>
-
-                  <div style={{ marginTop: 'auto', paddingTop: '20px' }}>
-                    {data.status === 'available' ? (
-                      <button
-                        onClick={async () => {
-                          try {
-                            const res = await fetch("/api/checkout", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ nicheId: selectedNiche })
-                            });
-                            const { url } = await res.json();
-                            if (url) window.location.href = url;
-                          } catch (e) {
-                            console.error("Checkout failed:", e);
-                            alert("Checkout failed. Check console.");
-                          }
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '12px',
-                          backgroundColor: 'rgba(0, 229, 255, 0.1)',
-                          color: '#00e5ff',
-                          border: '1px solid #00e5ff',
-                          boxShadow: '0 0 10px rgba(0, 229, 255, 0.3)',
-                          fontWeight: 'bold',
-                          letterSpacing: '2px',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        INITIALIZE ACQUISITION
-                      </button>
-                    ) : (
-                      <button
-                        style={{
-                          width: '100%',
-                          padding: '12px',
-                          backgroundColor: 'rgba(0, 229, 255, 0.05)',
-                          color: '#00e5ff',
-                          border: '1px solid rgba(0, 229, 255, 0.5)',
-                          letterSpacing: '2px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ACCESS MEMORY CORE
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ padding: '20px', textAlign: 'center', fontSize: '1.2rem', letterSpacing: '2px', width: '100%', pointerEvents: 'auto' }}>
-                <p style={{ margin: '0 0 20px 0' }}>TARGET: {selectedNiche.toUpperCase()}</p>
-                <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '10px', marginBottom: '20px' }}>
-                  <span style={{ width: '120px', opacity: 0.7, textAlign: 'left' }}>STATUS</span>
-                  <span style={{ fontWeight: 'bold', textTransform: 'uppercase', color: '#00e5ff' }}>AVAILABLE</span>
-                </div>
-                <button
-                  onClick={async () => {
-                    try {
-                      const res = await fetch("/api/checkout", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ nicheId: selectedNiche })
-                      });
-                      const { url } = await res.json();
-                      if (url) window.location.href = url;
-                    } catch (e) {
-                      console.error("Checkout failed:", e);
-                      alert("Checkout failed. Check console.");
-                    }
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    backgroundColor: 'rgba(0, 229, 255, 0.1)',
-                    color: '#00e5ff',
-                    border: '1px solid #00e5ff',
-                    boxShadow: '0 0 10px rgba(0, 229, 255, 0.3)',
-                    fontWeight: 'bold',
-                    letterSpacing: '2px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  INITIALIZE ACQUISITION
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })()}
+                )
+              })()}
+            </div>
+          )
+        })()}
+      </div>
 
       {/* Desktop Instruction Overlay */}
       {!loading && !showNunDialog && !isMobile && (
@@ -2865,55 +2730,51 @@ export default function ARScene({ onExit }: ARSceneProps) {
       )}
 
       {/* Nun Receptionist Dialog */}
-      {showNunDialog && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'rgba(10, 10, 15, 0.9)', border: '2px solid #d4af37', padding: '30px', borderRadius: '12px', zIndex: 100, color: 'white', width: '400px', textAlign: 'center', boxShadow: '0 0 20px rgba(212, 175, 55, 0.3)', pointerEvents: 'auto' }}>
-          <h2 style={{ color: '#d4af37', marginBottom: '10px' }}>Receptionist</h2>
-          {!hasGreetedRef.current && (
-            <p style={{ marginBottom: '25px', fontStyle: 'italic', color: '#ccc' }}>"Welcome to the Akasha Spaceship. How may I assist you today?"</p>
-          )}
-          {hasGreetedRef.current && (
-            <p style={{ marginBottom: '25px', fontStyle: 'italic', color: '#ccc' }}>"How else may I assist you?"</p>
-          )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <button onClick={() => handleNunOptionClick(0)} style={{ padding: '12px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#444')} onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#222')}>Have a private conversation</button>
-            <button onClick={() => handleNunOptionClick(1)} style={{ padding: '12px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#444')} onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#222')}>Show path leading to specific niche</button>
-            <button onClick={() => handleNunOptionClick(2)} style={{ padding: '12px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#444')} onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#222')}>Nun herself guides me to specific niche</button>
-            <button onClick={() => handleNunOptionClick(3)} style={{ padding: '12px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#444')} onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#222')}>Wander myself alone in the environment</button>
-          </div>
+      <div style={{ display: showNunDialog ? 'block' : 'none', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'rgba(10, 10, 15, 0.9)', border: '2px solid #d4af37', padding: '30px', borderRadius: '12px', zIndex: 100, color: 'white', width: '400px', textAlign: 'center', boxShadow: '0 0 20px rgba(212, 175, 55, 0.3)', pointerEvents: 'auto' }}>
+        <h2 style={{ color: '#d4af37', marginBottom: '10px' }}>Receptionist</h2>
+        {!hasGreetedRef.current && (
+          <p style={{ marginBottom: '25px', fontStyle: 'italic', color: '#ccc' }}>"Welcome to the Akasha Spaceship. How may I assist you today?"</p>
+        )}
+        {hasGreetedRef.current && (
+          <p style={{ marginBottom: '25px', fontStyle: 'italic', color: '#ccc' }}>"How else may I assist you?"</p>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <button onClick={() => handleNunOptionClick(0)} style={{ padding: '12px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#444')} onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#222')}>Have a private conversation</button>
+          <button onClick={() => handleNunOptionClick(1)} style={{ padding: '12px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#444')} onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#222')}>Show path leading to specific niche</button>
+          <button onClick={() => handleNunOptionClick(2)} style={{ padding: '12px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#444')} onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#222')}>Nun herself guides me to specific niche</button>
+          <button onClick={() => handleNunOptionClick(3)} style={{ padding: '12px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer', transition: 'background 0.2s' }} onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#444')} onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#222')}>Wander myself alone in the environment</button>
         </div>
-      )}
+      </div>
 
       {/* Search Prompt */}
-      {searchPrompt && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'rgba(10, 10, 15, 0.9)', border: '2px solid #00aaff', padding: '30px', borderRadius: '12px', zIndex: 100, color: 'white', width: '350px', textAlign: 'center', boxShadow: '0 0 20px rgba(0, 170, 255, 0.3)', pointerEvents: 'auto' }}>
-          <h2 style={{ color: '#00aaff', marginBottom: '10px' }}>Who are you visiting?</h2>
-          <p style={{ marginBottom: '20px', fontSize: '0.9rem', color: '#ccc' }}>Enter the full name of the person you are looking for.</p>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="e.g. Person 5"
-            style={{ width: '90%', padding: '12px', marginBottom: '20px', borderRadius: '5px', border: '1px solid #00aaff', backgroundColor: '#111', color: 'white', fontSize: '1rem' }}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
-            autoFocus
-          />
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-            <button onClick={handleSearchSubmit} style={{ padding: '10px 20px', backgroundColor: '#00aaff', border: 'none', color: 'black', fontWeight: 'bold', borderRadius: '5px', cursor: 'pointer' }}>Search</button>
-            <button onClick={() => setSearchPrompt(false)} style={{ padding: '10px 20px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer' }}>Cancel</button>
-          </div>
+      <div style={{ display: searchPrompt ? 'block' : 'none', position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'rgba(10, 10, 15, 0.9)', border: '2px solid #00aaff', padding: '30px', borderRadius: '12px', zIndex: 100, color: 'white', width: '350px', textAlign: 'center', boxShadow: '0 0 20px rgba(0, 170, 255, 0.3)', pointerEvents: 'auto' }}>
+        <h2 style={{ color: '#00aaff', marginBottom: '10px' }}>Who are you visiting?</h2>
+        <p style={{ marginBottom: '20px', fontSize: '0.9rem', color: '#ccc' }}>Enter the full name of the person you are looking for.</p>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="e.g. Person 5"
+          style={{ width: '90%', padding: '12px', marginBottom: '20px', borderRadius: '5px', border: '1px solid #00aaff', backgroundColor: '#111', color: 'white', fontSize: '1rem' }}
+          onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
+          autoFocus
+        />
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+          <button onClick={handleSearchSubmit} style={{ padding: '10px 20px', backgroundColor: '#00aaff', border: 'none', color: 'black', fontWeight: 'bold', borderRadius: '5px', cursor: 'pointer' }}>Search</button>
+          <button onClick={() => setSearchPrompt(false)} style={{ padding: '10px 20px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer' }}>Cancel</button>
         </div>
-      )}
+      </div>
 
       {/* Black Screen Fade Transition */}
       <div 
         style={{ 
+          display: fadeOpacity > 0 ? 'block' : 'none',
           position: 'absolute', 
           top: 0, left: 0, width: '100%', height: '100%', 
           backgroundColor: 'black', 
           opacity: fadeOpacity, 
           pointerEvents: 'none', 
-          zIndex: 9999, 
-          transition: 'opacity 0.1s linear' 
+          zIndex: 9999
         }} 
       />
 
