@@ -232,12 +232,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
     cameraRef.current = camera;
     
     // Spawn player inside the spaceship
-    // Use a dolly so WebXR AR tracking applies correctly to the camera
-    const cameraDolly = new THREE.Group();
-    cameraDolly.position.set(120.0, 50.0, 40.0);
-    scene.add(cameraDolly);
-    cameraDolly.add(camera);
-    camera.position.set(0, 0, 0);
+    scene.add(camera);
+    camera.position.set(120.0, 50.0, 40.0);
 
     const mobileCheck = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
