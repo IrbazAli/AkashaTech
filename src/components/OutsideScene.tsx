@@ -311,7 +311,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       }
 
       // Use optionalFeatures instead of required so it works on older Android ARCore
-      const vrOverlay = document.getElementById('vr-joystick-overlay');
+      const vrOverlay = document.getElementById('ar-overlay-root');
       xrButton = ARButton.createButton(renderer, { 
         optionalFeatures: ['hit-test', 'dom-overlay'],
         domOverlay: vrOverlay ? { root: vrOverlay } : undefined
@@ -2345,7 +2345,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
             }
 
             // Trigger transition earlier (below where the beam ends) so the view doesn't clip into the spaceship bottom
-            if (!isFadingRef.current && playerCollider.start.y > 130.0 && enteredFromGroundRef.current) {
+            if (!isFadingRef.current && playerCollider.start.y > 115.0 && enteredFromGroundRef.current) {
               isFadingRef.current = true;
               
               let opacity = 0;
@@ -2461,8 +2461,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      <div id="ar-overlay-root" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, pointerEvents: 'none' }}>
       {/* Mobile VR Joystick Overlay */}
-      <div id="vr-joystick-overlay" style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 9999 }}>
+      <div id="vr-joystick-overlay" style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         <div id="vr-joystick-zone" style={{ position: 'absolute', bottom: '50px', left: '50px', width: '150px', height: '150px', background: 'rgba(255,255,255,0.2)', borderRadius: '50%', pointerEvents: 'auto', touchAction: 'none' }}>
           <div id="vr-joystick-knob" style={{ position: 'absolute', top: '50px', left: '50px', width: '50px', height: '50px', background: 'rgba(255,255,255,0.8)', borderRadius: '50%', pointerEvents: 'none', transform: 'translate(0px, 0px)' }}></div>
         </div>
@@ -2491,6 +2492,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
         Owner: Unknown
       </div>
       
+      </div>
+
       {/* 3D Canvas Container */}
       <div ref={containerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} />
 
@@ -2521,7 +2524,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
           display: 'flex',
           flexDirection: 'column',
           gap: '15px',
-          textAlign: 'center'
+          textAlign: 'center',
+          pointerEvents: 'auto'
         }}>
           <h3 style={{ margin: '0 0 10px 0', color: '#00ffff' }}>iFly Chamber</h3>
           <button
@@ -2614,7 +2618,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
             padding: '25px',
             color: '#00e5ff',
             fontFamily: '"Courier New", Courier, monospace',
-            zIndex: 10
+            zIndex: 10,
+            pointerEvents: 'auto'
           }}>
             {/* Corner Accents */}
             <div style={{ position: 'absolute', top: -2, left: -2, width: '20px', height: '20px', borderTop: '4px solid #00e5ff', borderLeft: '4px solid #00e5ff' }}></div>
@@ -2806,7 +2811,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
                 </div>
               </div>
             ) : (
-              <div style={{ padding: '20px', textAlign: 'center', fontSize: '1.2rem', letterSpacing: '2px', width: '100%' }}>
+              <div style={{ padding: '20px', textAlign: 'center', fontSize: '1.2rem', letterSpacing: '2px', width: '100%', pointerEvents: 'auto' }}>
                 <p style={{ margin: '0 0 20px 0' }}>TARGET: {selectedNiche.toUpperCase()}</p>
                 <div style={{ display: 'flex', borderBottom: '1px solid rgba(0, 229, 255, 0.4)', paddingBottom: '10px', marginBottom: '20px' }}>
                   <span style={{ width: '120px', opacity: 0.7, textAlign: 'left' }}>STATUS</span>
@@ -2861,7 +2866,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
       {/* Nun Receptionist Dialog */}
       {showNunDialog && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'rgba(10, 10, 15, 0.9)', border: '2px solid #d4af37', padding: '30px', borderRadius: '12px', zIndex: 100, color: 'white', width: '400px', textAlign: 'center', boxShadow: '0 0 20px rgba(212, 175, 55, 0.3)' }}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'rgba(10, 10, 15, 0.9)', border: '2px solid #d4af37', padding: '30px', borderRadius: '12px', zIndex: 100, color: 'white', width: '400px', textAlign: 'center', boxShadow: '0 0 20px rgba(212, 175, 55, 0.3)', pointerEvents: 'auto' }}>
           <h2 style={{ color: '#d4af37', marginBottom: '10px' }}>Receptionist</h2>
           {!hasGreetedRef.current && (
             <p style={{ marginBottom: '25px', fontStyle: 'italic', color: '#ccc' }}>"Welcome to the Akasha Spaceship. How may I assist you today?"</p>
@@ -2880,7 +2885,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
       {/* Search Prompt */}
       {searchPrompt && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'rgba(10, 10, 15, 0.9)', border: '2px solid #00aaff', padding: '30px', borderRadius: '12px', zIndex: 100, color: 'white', width: '350px', textAlign: 'center', boxShadow: '0 0 20px rgba(0, 170, 255, 0.3)' }}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'rgba(10, 10, 15, 0.9)', border: '2px solid #00aaff', padding: '30px', borderRadius: '12px', zIndex: 100, color: 'white', width: '350px', textAlign: 'center', boxShadow: '0 0 20px rgba(0, 170, 255, 0.3)', pointerEvents: 'auto' }}>
           <h2 style={{ color: '#00aaff', marginBottom: '10px' }}>Who are you visiting?</h2>
           <p style={{ marginBottom: '20px', fontSize: '0.9rem', color: '#ccc' }}>Enter the full name of the person you are looking for.</p>
           <input
@@ -2918,7 +2923,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
           backgroundColor: 'rgba(10, 10, 15, 0.95)', border: '2px solid #00aaff', padding: '30px',
           borderRadius: '12px', zIndex: 100, color: 'white', width: '350px', textAlign: 'center',
-          boxShadow: '0 0 20px rgba(0, 170, 255, 0.3)'
+          boxShadow: '0 0 20px rgba(0, 170, 255, 0.3)', pointerEvents: 'auto'
         }}>
           <h2 style={{ color: '#00aaff', marginBottom: '10px' }}>Purchase NFT</h2>
           <p style={{ marginBottom: '20px', fontSize: '0.9rem', color: '#ccc' }}>
@@ -2967,7 +2972,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           style={{
             position: 'absolute', bottom: '20px', right: '20px', zIndex: 10, padding: '12px 24px',
             backgroundColor: '#d4af37', color: 'black', fontWeight: 'bold', border: 'none',
-            borderRadius: '5px', cursor: 'pointer', boxShadow: '0 0 10px rgba(212, 175, 55, 0.5)'
+            borderRadius: '5px', cursor: 'pointer', boxShadow: '0 0 10px rgba(212, 175, 55, 0.5)', pointerEvents: 'auto'
           }}
         >
           Open Bag 🎒
@@ -2980,7 +2985,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
           backgroundColor: 'rgba(10, 10, 15, 0.95)', border: '2px solid #d4af37', padding: '30px',
           borderRadius: '12px', zIndex: 100, color: 'white', width: '400px', minHeight: '300px',
-          boxShadow: '0 0 20px rgba(212, 175, 55, 0.3)', display: 'flex', flexDirection: 'column'
+          boxShadow: '0 0 20px rgba(212, 175, 55, 0.3)', display: 'flex', flexDirection: 'column', pointerEvents: 'auto'
         }}>
           <h2 style={{ color: '#d4af37', marginBottom: '20px', borderBottom: '1px solid #444', paddingBottom: '10px' }}>Your Bag</h2>
           <div style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
