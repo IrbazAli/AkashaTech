@@ -257,9 +257,29 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
     if (mobileCheck) {
       xrButton = ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] });
-      xrButton.style.bottom = '20px';
-      xrButton.style.zIndex = '100';
+      // Hide the default button
+      xrButton.style.display = 'none';
       document.body.appendChild(xrButton);
+      
+      // Attempt to auto-start AR once the button is initialized
+      const tryAutoStart = setInterval(() => {
+        if (xrButton && !xrButton.disabled && xrButton.textContent === 'START AR') {
+          xrButton.click();
+          clearInterval(tryAutoStart);
+        }
+      }, 100);
+
+      // Failsafe: Browsers often block auto-starting AR without a user tap. 
+      // This makes the first tap anywhere on the screen start the AR session.
+      const fallbackStart = () => {
+         if (xrButton && !xrButton.disabled && xrButton.textContent === 'START AR') {
+           xrButton.click();
+         }
+         window.removeEventListener('click', fallbackStart);
+         window.removeEventListener('touchstart', fallbackStart);
+      };
+      window.addEventListener('click', fallbackStart);
+      window.addEventListener('touchstart', fallbackStart);
       
       renderer.xr.addEventListener('sessionstart', () => {
         scene.background = null; // Enable real-world passthrough
