@@ -201,6 +201,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const activePlacementTargetRef = useRef<THREE.Group | null>(null);
+  const joystickRef = useRef({ x: 0, y: 0 });
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -239,7 +240,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
     if (mobileCheck) {
       cameraDolly.add(camera);
       cameraDolly.position.set(120.0, 50.0, 40.0);
-      cameraDolly.scale.set(10, 1, 10); // 1 real step = 10 virtual meters
       camera.position.set(0, 0, 0);
     } else {
       scene.add(camera);
@@ -265,8 +265,57 @@ export default function ARScene({ onExit }: ARSceneProps) {
     let xrButton: HTMLElement | null = null;
 
     if (mobileCheck) {
+      // Setup Joystick Touch Listeners before AR starts
+      const joystickZone = document.getElementById('vr-joystick-zone');
+      const joystickKnob = document.getElementById('vr-joystick-knob');
+      let touchId: number | null = null;
+      if (joystickZone && joystickKnob) {
+        const updateJoystick = (touch: any) => {
+          const rect = joystickZone.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+          let dx = touch.clientX - centerX;
+          let dy = touch.clientY - centerY;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const maxDist = 50;
+          if (distance > maxDist) {
+            dx = (dx / distance) * maxDist;
+            dy = (dy / distance) * maxDist;
+          }
+          joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+          joystickRef.current = { x: dx / maxDist, y: dy / maxDist };
+        };
+        const resetJoystick = (e: any) => {
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === touchId) {
+              touchId = null;
+              joystickKnob.style.transform = `translate(0px, 0px)`;
+              joystickRef.current = { x: 0, y: 0 };
+            }
+          }
+        };
+        joystickZone.addEventListener('touchstart', (e: any) => {
+          e.preventDefault();
+          const touch = e.changedTouches[0];
+          touchId = touch.identifier;
+          updateJoystick(touch);
+        });
+        joystickZone.addEventListener('touchmove', (e: any) => {
+          e.preventDefault();
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === touchId) updateJoystick(e.changedTouches[i]);
+          }
+        });
+        joystickZone.addEventListener('touchend', resetJoystick);
+        joystickZone.addEventListener('touchcancel', resetJoystick);
+      }
+
       // Use optionalFeatures instead of required so it works on older Android ARCore
-      xrButton = ARButton.createButton(renderer, { optionalFeatures: ['hit-test'] });
+      const vrOverlay = document.getElementById('vr-joystick-overlay');
+      xrButton = ARButton.createButton(renderer, { 
+        optionalFeatures: ['hit-test', 'dom-overlay'],
+        domOverlay: vrOverlay ? { root: vrOverlay } : undefined
+      });
       xrButton.style.bottom = '20px';
       xrButton.style.zIndex = '100';
       document.body.appendChild(xrButton);
@@ -2115,8 +2164,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
       }
 
 
-      // Desktop Movement Logic (Octree & Capsule)
-      if (controls.isLocked) {
+      // Desktop & Mobile Movement Logic (Octree & Capsule)
+      if (controls.isLocked || mobileCheck) {
         // Calculate forward/right vectors based on camera yaw
         const camDir = new THREE.Vector3();
         camera.getWorldDirection(camDir);
@@ -2127,8 +2176,15 @@ export default function ARScene({ onExit }: ARSceneProps) {
         camRight.crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize();
 
         // Input movement
-        const moveZ = Number(moveState.forward) - Number(moveState.backward);
-        const moveX = Number(moveState.right) - Number(moveState.left);
+        let moveZ = 0;
+        let moveX = 0;
+        if (!mobileCheck) {
+          moveZ = Number(moveState.forward) - Number(moveState.backward);
+          moveX = Number(moveState.right) - Number(moveState.left);
+        } else if (joystickRef.current) {
+          moveZ = -joystickRef.current.y;
+          moveX = joystickRef.current.x;
+        }
 
         // Physics Sub-stepping for stability
         const STEPS_PER_FRAME = 5;
@@ -2360,16 +2416,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
           // Sync Camera/Dolly to Capsule Feet
           if (mobileCheck) {
-            // Apply gravity to mobile: lower the dolly to the capsule's feet on the ground
-            cameraDolly.position.y = playerCollider.start.y;
-            
-            // Constantly teleport the invisible physics capsule to where the user walked
-            const camWorldPos = new THREE.Vector3();
-            camera.getWorldPosition(camWorldPos);
-            playerCollider.start.x = camWorldPos.x;
-            playerCollider.start.z = camWorldPos.z;
-            playerCollider.end.x = camWorldPos.x;
-            playerCollider.end.z = camWorldPos.z;
+            // Mobile: Capsule determines ground position.
+            cameraDolly.position.copy(playerCollider.start);
           } else {
             camera.position.copy(playerCollider.start);
             // Force camera to exactly 4.5m height above the feet visually to maintain a tall human height!
@@ -2404,6 +2452,13 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      {/* Mobile VR Joystick Overlay */}
+      <div id="vr-joystick-overlay" style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 9999 }}>
+        <div id="vr-joystick-zone" style={{ position: 'absolute', bottom: '50px', left: '50px', width: '150px', height: '150px', background: 'rgba(255,255,255,0.2)', borderRadius: '50%', pointerEvents: 'auto', touchAction: 'none' }}>
+          <div id="vr-joystick-knob" style={{ position: 'absolute', top: '50px', left: '50px', width: '50px', height: '50px', background: 'rgba(255,255,255,0.8)', borderRadius: '50%', pointerEvents: 'none', transform: 'translate(0px, 0px)' }}></div>
+        </div>
+      </div>
+
       {/* NFT Nameplate DOM Overlay */}
       <div 
         id="nft-nameplate" 
