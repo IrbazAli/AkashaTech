@@ -2463,7 +2463,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <div id="ar-overlay-root" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, pointerEvents: 'none' }}>
       {/* Mobile VR Joystick Overlay */}
-      <div id="vr-joystick-overlay" style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+      <div id="vr-joystick-overlay" style={{ display: isMobile ? 'block' : 'none', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         <div id="vr-joystick-zone" style={{ position: 'absolute', bottom: '50px', left: '50px', width: '150px', height: '150px', background: 'rgba(255,255,255,0.2)', borderRadius: '50%', pointerEvents: 'auto', touchAction: 'none' }}>
           <div id="vr-joystick-knob" style={{ position: 'absolute', top: '50px', left: '50px', width: '50px', height: '50px', background: 'rgba(255,255,255,0.8)', borderRadius: '50%', pointerEvents: 'none', transform: 'translate(0px, 0px)' }}></div>
         </div>
