@@ -231,11 +231,19 @@ export default function ARScene({ onExit }: ARSceneProps) {
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     cameraRef.current = camera;
     
-    // Spawn player inside the spaceship
-    scene.add(camera);
-    camera.position.set(120.0, 50.0, 40.0);
-
     const mobileCheck = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    const cameraDolly = new THREE.Group();
+    scene.add(cameraDolly);
+
+    if (mobileCheck) {
+      cameraDolly.add(camera);
+      cameraDolly.position.set(120.0, 50.0, 40.0);
+      camera.position.set(0, 0, 0);
+    } else {
+      scene.add(camera);
+      camera.position.set(120.0, 50.0, 40.0);
+    }
 
     const renderer = new THREE.WebGLRenderer({ 
       antialias: true, 
@@ -256,33 +264,14 @@ export default function ARScene({ onExit }: ARSceneProps) {
     let xrButton: HTMLElement | null = null;
 
     if (mobileCheck) {
-      xrButton = ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] });
-      // Hide the default button
-      xrButton.style.display = 'none';
+      // Use optionalFeatures instead of required so it works on older Android ARCore
+      xrButton = ARButton.createButton(renderer, { optionalFeatures: ['hit-test'] });
+      xrButton.style.bottom = '20px';
+      xrButton.style.zIndex = '100';
       document.body.appendChild(xrButton);
       
-      // Attempt to auto-start AR once the button is initialized
-      const tryAutoStart = setInterval(() => {
-        if (xrButton && !xrButton.disabled && xrButton.textContent === 'START AR') {
-          xrButton.click();
-          clearInterval(tryAutoStart);
-        }
-      }, 100);
-
-      // Failsafe: Browsers often block auto-starting AR without a user tap. 
-      // This makes the first tap anywhere on the screen start the AR session.
-      const fallbackStart = () => {
-         if (xrButton && !xrButton.disabled && xrButton.textContent === 'START AR') {
-           xrButton.click();
-         }
-         window.removeEventListener('click', fallbackStart);
-         window.removeEventListener('touchstart', fallbackStart);
-      };
-      window.addEventListener('click', fallbackStart);
-      window.addEventListener('touchstart', fallbackStart);
-      
       renderer.xr.addEventListener('sessionstart', () => {
-        scene.background = null; // Enable real-world passthrough
+        // Keep the dark space background instead of null, to simulate VR without seeing the real world.
       });
       renderer.xr.addEventListener('sessionend', () => {
         scene.background = new THREE.Color(0x050508); // Restore space background
@@ -2361,10 +2350,12 @@ export default function ARScene({ onExit }: ARSceneProps) {
           }
         }
 
-        // Sync Camera to Capsule Feet (start)
-        camera.position.copy(playerCollider.start);
-        // Force camera to exactly 4.5m height above the feet visually to maintain a tall human height!
-        camera.position.y += (window as any).__PLAYER_ON_SPACESHIP__ ? 4.0 : 12.0;
+          // Sync Camera to Capsule Feet (start) (Only on Desktop, so Mobile WebXR can track freely)
+          if (!mobileCheck) {
+            camera.position.copy(playerCollider.start);
+            // Force camera to exactly 4.5m height above the feet visually to maintain a tall human height!
+            camera.position.y += (window as any).__PLAYER_ON_SPACESHIP__ ? 4.0 : 12.0;
+          }
       }
 
       renderer.render(scene, camera);
