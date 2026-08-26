@@ -322,9 +322,10 @@ export default function ARScene({ onExit }: ARSceneProps) {
       
       // Fake VR Skybox: A massive inverted sphere to permanently block the AR real-world camera feed
       const vrSkyboxGeo = new THREE.SphereGeometry(900, 32, 32);
-      const vrSkyboxMat = new THREE.MeshBasicMaterial({ color: 0x050508, side: THREE.BackSide });
+      const vrSkyboxMat = new THREE.MeshBasicMaterial({ color: 0x050508, side: THREE.BackSide, depthWrite: false });
       const vrSkybox = new THREE.Mesh(vrSkyboxGeo, vrSkyboxMat);
-      scene.add(vrSkybox);
+      vrSkybox.renderOrder = -1;
+      cameraDolly.add(vrSkybox);
       
       renderer.xr.addEventListener('sessionstart', () => {
         // We added a physical skybox sphere to block the camera feed, so background doesn't matter,
@@ -2421,6 +2422,12 @@ export default function ARScene({ onExit }: ARSceneProps) {
             // We add targetHeight because WebXR magic-window local space starts at Y=0.
             cameraDolly.position.copy(playerCollider.start);
             cameraDolly.position.y += targetHeight;
+
+            // 10x Physical AR Walking Multiplier!
+            // Instead of non-uniform matrix scale (which distorts pitch rotation),
+            // we dynamically offset the dolly by 9x the camera's local displacement.
+            cameraDolly.position.x += camera.position.x * 9.0;
+            cameraDolly.position.z += camera.position.z * 9.0;
           } else {
             camera.position.copy(playerCollider.start);
             camera.position.y += targetHeight;
