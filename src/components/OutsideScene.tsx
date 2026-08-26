@@ -410,8 +410,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
               const statue = statueGltf.scene;
               const box = new THREE.Box3().setFromObject(statue);
               const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
-              const scale = 25.0 / maxDim; 
+              const scale = 32.0 / maxDim; 
               statue.scale.set(scale, scale, scale);
+              statue.updateMatrixWorld(true);
               const newBox = new THREE.Box3().setFromObject(statue);
               const bottomOffset = newBox.min.y - statue.position.y;
               statue.position.set(nft.x, nft.y, nft.z);
@@ -432,11 +433,15 @@ export default function ARScene({ onExit }: ARSceneProps) {
             loaderTree.load('/models/grass-fountain.glb', (fountainGltf: any) => {
               const fountain = fountainGltf.scene;
               const fBox = new THREE.Box3().setFromObject(fountain);
-              const fSize = Math.max(fBox.getSize(new THREE.Vector3()).x, 1);
-              const fScale = 35.0 / fSize;
+              const fSize = Math.max(fBox.getSize(new THREE.Vector3()).y, 1);
+              const fScale = 12.0 / fSize;
               fountain.scale.set(fScale, fScale, fScale);
+              fountain.updateMatrixWorld(true);
               const newFBox = new THREE.Box3().setFromObject(fountain);
+              const fCenter = new THREE.Vector3();
+              newFBox.getCenter(fCenter);
               const bottomOffset = newFBox.min.y - fountain.position.y;
+              const topOffset = newFBox.max.y - fountain.position.y;
               const nftTreeGroup = new THREE.Group();
               nftTreeGroup.position.set(nft.x, nft.y, nft.z);
               nftTreeGroup.userData.isDraggableNft = true;
@@ -471,9 +476,10 @@ export default function ARScene({ onExit }: ARSceneProps) {
                 });
                 const box = new THREE.Box3().setFromObject(tree);
                 const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
-                const scale = 23.0 / maxDim;
+                const scale = 75.0 / maxDim;
                 tree.scale.set(scale, scale, scale);
-                tree.position.set(0, bottomOffset + 0.1, 0);
+                tree.updateMatrixWorld(true);
+                tree.position.set(fCenter.x, topOffset, fCenter.z);
                 nftTreeGroup.add(tree);
               });
             });
@@ -2882,11 +2888,13 @@ export default function ARScene({ onExit }: ARSceneProps) {
                              
                              const box = new THREE.Box3().setFromObject(model);
                              const maxDim = Math.max(box.getSize(new THREE.Vector3()).y, 1);
-                             const scale = item.modelType === 'statue' ? (32.0 / maxDim) : (24.0 / maxDim);
+                             const scale = item.modelType === 'statue' ? (32.0 / maxDim) : (12.0 / maxDim);
                              model.scale.set(scale, scale, scale);
                              model.updateMatrixWorld(true);
                              
                              const scaledBox = new THREE.Box3().setFromObject(model);
+                             const fCenter = new THREE.Vector3();
+                             scaledBox.getCenter(fCenter);
                              let bottomOffset = scaledBox.min.y - model.position.y;
                              let topOffset = scaledBox.max.y - model.position.y;
                              
@@ -2921,9 +2929,13 @@ export default function ARScene({ onExit }: ARSceneProps) {
                                   });
                                   const tBox = new THREE.Box3().setFromObject(innerTree);
                                   const tMaxDim = Math.max(tBox.getSize(new THREE.Vector3()).y, 1);
-                                  const tScale = 45.0 / tMaxDim;
+                                  // The bounding box of the tree GLB might be huge due to invisible bounds/cameras,
+                                  // making the tree appear tiny when scaled based on tMaxDim.
+                                  // We will multiply the scale by a massive factor to compensate.
+                                  const tScale = 75.0 / tMaxDim;
                                   innerTree.scale.set(tScale, tScale, tScale);
-                                  innerTree.position.set(0, topOffset, 0);
+                                  innerTree.updateMatrixWorld(true);
+                                  innerTree.position.set(fCenter.x, topOffset, fCenter.z);
                                   nftTreeGroup.add(innerTree);
                                 }, undefined, (err: any) => {
                                   console.error(`[NFT PLACEMENT LOG ERROR] Failed to load inner tree.glb:`, err);
