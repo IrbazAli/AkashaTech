@@ -1346,33 +1346,49 @@ export default function ARScene({ onExit }: ARSceneProps) {
     const raycaster = new THREE.Raycaster();
     const center = new THREE.Vector2(0, 0);
 
-    const onMouseClick = (event: MouseEvent) => {
-      if (!mobileCheck && !controls.isLocked) return;
-
-      // DROP LOGIC
-      if (activePlacementTargetRef.current) {
-        console.log("[NFT Placement] Dropped object.");
+      const onMouseClick = (event: MouseEvent | null) => {
+        if (!mobileCheck && !controls.isLocked) return;
         
-        // Save new coordinates to DB
-        if (activePlacementTargetRef.current.userData.nftId) {
-          fetch(`/api/nft/${activePlacementTargetRef.current.userData.nftId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              x: activePlacementTargetRef.current.position.x,
-              y: activePlacementTargetRef.current.position.y,
-              z: activePlacementTargetRef.current.position.z,
-              isPlaced: true
-            })
-          });
+        // In AR mode, standard DOM clicks shouldn't trigger the center-raycaster 
+        // if they were already handled by the XR 'select' event.
+        // We pass event=null from the XR select event.
+        if (renderer.xr.isPresenting && event !== null) return;
+
+        // DROP LOGIC
+        if (activePlacementTargetRef.current) {
+          console.log("[NFT Placement] Dropped object.");
+          
+          // Save new coordinates to DB
+          if (activePlacementTargetRef.current.userData.nftId) {
+            fetch(`/api/nft/${activePlacementTargetRef.current.userData.nftId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                x: activePlacementTargetRef.current.position.x,
+                y: activePlacementTargetRef.current.position.y,
+                z: activePlacementTargetRef.current.position.z,
+                isPlaced: true
+              })
+            });
+          }
+          
+          activePlacementTargetRef.current = null;
+          return;
+        }
+
+        if (renderer.xr.isPresenting && event === null) {
+          // Use the WebXR controller's exact ray for hit testing!
+          const controller = renderer.xr.getController(0);
+          const matrix = new THREE.Matrix4();
+          matrix.extractRotation(controller.matrixWorld);
+          raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+          raycaster.ray.direction.set(0, 0, -1).applyMatrix4(matrix);
+        } else {
+          // Default FPS center-screen raycast
+          raycaster.setFromCamera(center, camera);
         }
         
-        activePlacementTargetRef.current = null;
-        return;
-      }
-
-      raycaster.setFromCamera(center, camera);
-      const intersects = raycaster.intersectObjects(scene.children, true);
+        const intersects = raycaster.intersectObjects(scene.children, true);
 
       // Filter out ceiling/environment if raycasting hits non-interactable meshes
       const interactiveIntersects = intersects.filter(i => {
@@ -1464,7 +1480,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       }
     };
     document.addEventListener('click', onMouseClick);
-    renderer.xr.getController(0).addEventListener('select', () => onMouseClick(null as any));
+    renderer.xr.getController(0).addEventListener('select', () => onMouseClick(null));
 
     // 6. RENDER LOOP
     const speed = 350.0;
@@ -1967,14 +1983,16 @@ export default function ARScene({ onExit }: ARSceneProps) {
         const head = window.__SPACESHIP_CACHE__?.guideHeadBone;
         const avatarGroup = window.__SPACESHIP_CACHE__?.guideGltf?.scene;
         if (head && (head as any).isBone && avatarGroup && camera) {
-          const headPos = new THREE.Vector3();
-          head.getWorldPosition(headPos);
           const avatarForward = new THREE.Vector3(0, 0, 1).applyQuaternion(avatarGroup.quaternion).normalize();
-          const toCam = new THREE.Vector3().subVectors(camera.position, headPos).normalize();
+          if (head) {
+            const headPos = head.getWorldPosition(new THREE.Vector3());
+            const camWorldPos = camera.getWorldPosition(new THREE.Vector3());
+            const toCam = new THREE.Vector3().subVectors(camWorldPos, headPos).normalize();
 
-          // Only track if camera is in front of avatar (dot > 0 = within 180 degree cone)
-          if (avatarForward.dot(toCam) > 0 && window.__SPACESHIP_CACHE__?.guideCurrentAction !== 'Walking') {
-            head.lookAt(camera.position);
+            // Only track if camera is in front of avatar (dot > 0 = within 180 degree cone)
+            if (avatarForward.dot(toCam) > 0 && window.__SPACESHIP_CACHE__?.guideCurrentAction !== 'Walking') {
+              head.lookAt(camWorldPos);
+            }
           }
         }
 
@@ -2492,8 +2510,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
         Owner: Unknown
       </div>
       
-      </div>
-
       {/* 3D Canvas Container */}
       <div ref={containerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} />
 
@@ -2993,6 +3009,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
           <button onClick={() => setShowInventory(false)} style={{ padding: '10px', backgroundColor: '#222', border: '1px solid #444', color: 'white', borderRadius: '5px', cursor: 'pointer' }}>Close</button>
         </div>
       )}
+
+      </div> {/* END OF AR OVERLAY ROOT */}
 
       {/* Exit Button */}
       <button
