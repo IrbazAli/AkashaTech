@@ -239,6 +239,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
     if (mobileCheck) {
       cameraDolly.add(camera);
       cameraDolly.position.set(120.0, 50.0, 40.0);
+      cameraDolly.scale.set(10, 1, 10); // 1 real step = 10 virtual meters
       camera.position.set(0, 0, 0);
     } else {
       scene.add(camera);
@@ -2357,8 +2358,19 @@ export default function ARScene({ onExit }: ARSceneProps) {
           }
         }
 
-          // Sync Camera to Capsule Feet (start) (Only on Desktop, so Mobile WebXR can track freely)
-          if (!mobileCheck) {
+          // Sync Camera/Dolly to Capsule Feet
+          if (mobileCheck) {
+            // Apply gravity to mobile: lower the dolly to the capsule's feet on the ground
+            cameraDolly.position.y = playerCollider.start.y;
+            
+            // Constantly teleport the invisible physics capsule to where the user walked
+            const camWorldPos = new THREE.Vector3();
+            camera.getWorldPosition(camWorldPos);
+            playerCollider.start.x = camWorldPos.x;
+            playerCollider.start.z = camWorldPos.z;
+            playerCollider.end.x = camWorldPos.x;
+            playerCollider.end.z = camWorldPos.z;
+          } else {
             camera.position.copy(playerCollider.start);
             // Force camera to exactly 4.5m height above the feet visually to maintain a tall human height!
             camera.position.y += (window as any).__PLAYER_ON_SPACESHIP__ ? 4.0 : 12.0;
