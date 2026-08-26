@@ -389,6 +389,11 @@ export default function ARScene({ onExit }: ARSceneProps) {
     const floorRaycaster = new THREE.Raycaster();
     const wallRaycaster = new THREE.Raycaster();
     const controls = new PointerLockControls(camera, renderer.domElement);
+    controls.addEventListener('lock', () => {
+      // Failsafe: if the pointer locks successfully, we MUST unlock movement 
+      // in case a dialogue or animation sequence previously locked it and glitched.
+      isMovementLockedRef.current = false;
+    });
 
     const blockClick = (e: MouseEvent) => {
       if (!mobileCheck && !controls.isLocked) {
@@ -1383,6 +1388,11 @@ export default function ARScene({ onExit }: ARSceneProps) {
           matrix.extractRotation(controller.matrixWorld);
           raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
           raycaster.ray.direction.set(0, 0, -1).applyMatrix4(matrix);
+        } else if (event && mobileCheck && !renderer.xr.isPresenting) {
+          // Mobile tap raycast: use the actual tap coordinates instead of screen center
+          const x = (event.clientX / window.innerWidth) * 2 - 1;
+          const y = -(event.clientY / window.innerHeight) * 2 + 1;
+          raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
         } else {
           // Default FPS center-screen raycast
           raycaster.setFromCamera(center, camera);
@@ -1543,6 +1553,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
     }
 
     let lastTime = performance.now();
+    const previousCameraLocalPos = new THREE.Vector3();
+    let wasPresenting = false;
 
     // Track sliding animations for niches
     const animatedNiches: {
@@ -2189,20 +2201,43 @@ export default function ARScene({ onExit }: ARSceneProps) {
         const camDir = new THREE.Vector3();
         camera.getWorldDirection(camDir);
         camDir.y = 0;
-        camDir.normalize();
+        if (camDir.lengthSq() < 0.0001) camDir.set(0, 0, -1);
+        else camDir.normalize();
 
         const camRight = new THREE.Vector3();
-        camRight.crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize();
+        camRight.crossVectors(camDir, new THREE.Vector3(0, 1, 0));
+        if (camRight.lengthSq() < 0.0001) camRight.set(1, 0, 0);
+        else camRight.normalize();
 
         // Input movement
-        let moveZ = 0;
-        let moveX = 0;
-        if (!mobileCheck) {
-          moveZ = Number(moveState.forward) - Number(moveState.backward);
-          moveX = Number(moveState.right) - Number(moveState.left);
-        } else if (joystickRef.current) {
+        let moveZ = Number(moveState.forward) - Number(moveState.backward);
+        let moveX = Number(moveState.right) - Number(moveState.left);
+
+        // Fallback to joystick if no WASD input
+        if (moveZ === 0 && moveX === 0 && joystickRef.current) {
           moveZ = -joystickRef.current.y;
           moveX = joystickRef.current.x;
+        }
+
+        // --- AR Physical Movement Translation ---
+        // Map physical walking into the playerCollider so collisions are respected!
+        const isPresenting = renderer.xr.isPresenting;
+        if (mobileCheck && isPresenting) {
+          if (!wasPresenting) {
+            previousCameraLocalPos.copy(camera.position);
+            wasPresenting = true;
+          } else {
+            const deltaX = camera.position.x - previousCameraLocalPos.x;
+            const deltaZ = camera.position.z - previousCameraLocalPos.z;
+            
+            if (Math.abs(deltaX) > 0.0001 || Math.abs(deltaZ) > 0.0001) {
+              // Apply 10x multiplier to physical movement
+              playerCollider.translate(new THREE.Vector3(deltaX * 10.0, 0, deltaZ * 10.0));
+            }
+            previousCameraLocalPos.copy(camera.position);
+          }
+        } else if (wasPresenting) {
+          wasPresenting = false;
         }
 
         // Physics Sub-stepping for stability
@@ -2238,7 +2273,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           if (tubeCenterRef.current) {
             const tempDx = playerCollider.start.x - tubeCenterRef.current.x;
             const tempDz = playerCollider.start.z - tubeCenterRef.current.z;
-            const tempRadius = Math.max(2.0, Math.min(tubeRadiusRef.current, 10.0));
+            const tempRadius = Math.max(2.0, tubeRadiusRef.current * 11.5);
             if (Math.sqrt(tempDx * tempDx + tempDz * tempDz) < tempRadius && playerCollider.start.y >= 140.0) {
               isCurrentlyInTube = true;
             }
@@ -2251,7 +2286,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
           if (groundTubeCenterRef.current) {
             const tempDx = playerCollider.start.x - groundTubeCenterRef.current.x;
             const tempDz = playerCollider.start.z - groundTubeCenterRef.current.z;
-            const tempRadius = Math.max(2.0, Math.min(groundTubeRadiusRef.current, 10.0));
+            const tempRadius = Math.max(2.0, groundTubeRadiusRef.current * 0.95);
             // Keep lifting until they are slightly ABOVE the spaceship floor (163.05)
             // so that when octree takes over, they smoothly drop 0.05m onto the floor instead of getting stuck inside it.
             if (Math.sqrt(tempDx * tempDx + tempDz * tempDz) < tempRadius && playerCollider.start.y < 160.05) {
@@ -2272,7 +2307,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
             distToTubeCenter = Math.sqrt(dx * dx + dz * dz);
 
             // Allow a tiny margin of error inside the tube
-            const activeRadius = Math.max(2.0, Math.min(tubeRadiusRef.current, 10.0));
+            const activeRadius = Math.max(2.0, tubeRadiusRef.current * 11.5);
 
             // Doorway is defined by being within 3.5 units of ANY door (glass or metal) on the current floor, regardless of if it's open
             const currentFloorY = targetFloorYRef.current;
@@ -2332,7 +2367,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
             const gx = playerCollider.start.x - groundTubeCenterRef.current.x;
             const gz = playerCollider.start.z - groundTubeCenterRef.current.z;
             distToGroundTubeCenter = Math.sqrt(gx * gx + gz * gz);
-            const gActiveRadius = Math.max(2.0, Math.min(groundTubeRadiusRef.current, 10.0));
+            const gActiveRadius = Math.max(2.0, groundTubeRadiusRef.current * 0.95);
 
             // Is near ground door?
             const isGroundDoorway = groundDoorsRef.current.some(door => {
@@ -2441,11 +2476,13 @@ export default function ARScene({ onExit }: ARSceneProps) {
             cameraDolly.position.copy(playerCollider.start);
             cameraDolly.position.y += targetHeight;
 
-            // 10x Physical AR Walking Multiplier!
-            // Instead of non-uniform matrix scale (which distorts pitch rotation),
-            // we dynamically offset the dolly by 9x the camera's local displacement.
-            cameraDolly.position.x += camera.position.x * 9.0;
-            cameraDolly.position.z += camera.position.z * 9.0;
+            // 10x Physical AR Walking Multiplier Fix:
+            // Since we applied the 10x movement to the playerCollider *before* collisions,
+            // we now just offset the dolly so the visual camera exactly matches the constrained collider.
+            if (renderer.xr.isPresenting) {
+               cameraDolly.position.x -= camera.position.x;
+               cameraDolly.position.z -= camera.position.z;
+            }
           } else {
             camera.position.copy(playerCollider.start);
             camera.position.y += targetHeight;
