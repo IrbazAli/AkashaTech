@@ -2415,13 +2415,15 @@ export default function ARScene({ onExit }: ARSceneProps) {
         }
 
           // Sync Camera/Dolly to Capsule Feet
+          const targetHeight = (window as any).__PLAYER_ON_SPACESHIP__ ? 4.0 : 12.0;
           if (mobileCheck) {
-            // Mobile: Capsule determines ground position.
+            // Mobile: Capsule determines ground position. 
+            // We add targetHeight because WebXR magic-window local space starts at Y=0.
             cameraDolly.position.copy(playerCollider.start);
+            cameraDolly.position.y += targetHeight;
           } else {
             camera.position.copy(playerCollider.start);
-            // Force camera to exactly 4.5m height above the feet visually to maintain a tall human height!
-            camera.position.y += (window as any).__PLAYER_ON_SPACESHIP__ ? 4.0 : 12.0;
+            camera.position.y += targetHeight;
           }
       }
 
