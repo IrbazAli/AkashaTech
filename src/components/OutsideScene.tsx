@@ -10,8 +10,10 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 // @ts-ignore
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 // @ts-ignore
+// @ts-ignore
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 // @ts-ignore
+import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
 import { Octree } from 'three/examples/jsm/math/Octree.js';
 // @ts-ignore
 import { Capsule } from 'three/examples/jsm/math/Capsule.js';
@@ -199,6 +201,11 @@ export default function ARScene({ onExit }: ARSceneProps) {
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const activePlacementTargetRef = useRef<THREE.Group | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    setIsMobile(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+  }, []);
 
   // Helper to sync ref and state
   const updateInTube = (val: boolean) => {
@@ -223,10 +230,22 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     cameraRef.current = camera;
+    
     // Spawn player inside the spaceship
-    camera.position.set(120.0, 50.0, 40.0);
+    // Use a dolly so WebXR AR tracking applies correctly to the camera
+    const cameraDolly = new THREE.Group();
+    cameraDolly.position.set(120.0, 50.0, 40.0);
+    scene.add(cameraDolly);
+    cameraDolly.add(camera);
+    camera.position.set(0, 0, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    const mobileCheck = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true, 
+      alpha: mobileCheck, // Transparent background required for AR passthrough
+      powerPreference: "high-performance" 
+    });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Cap pixel ratio for high FPS
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -238,10 +257,26 @@ export default function ARScene({ onExit }: ARSceneProps) {
     containerRef.current.innerHTML = '';
     containerRef.current.appendChild(renderer.domElement);
 
-    const vrButton = VRButton.createButton(renderer);
-    vrButton.style.bottom = '20px';
-    vrButton.style.zIndex = '100';
-    document.body.appendChild(vrButton);
+    let xrButton: HTMLElement | null = null;
+
+    if (mobileCheck) {
+      xrButton = ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] });
+      xrButton.style.bottom = '20px';
+      xrButton.style.zIndex = '100';
+      document.body.appendChild(xrButton);
+      
+      renderer.xr.addEventListener('sessionstart', () => {
+        scene.background = null; // Enable real-world passthrough
+      });
+      renderer.xr.addEventListener('sessionend', () => {
+        scene.background = new THREE.Color(0x050508); // Restore space background
+      });
+    } else {
+      xrButton = VRButton.createButton(renderer);
+      xrButton.style.bottom = '20px';
+      xrButton.style.zIndex = '100';
+      document.body.appendChild(xrButton);
+    }
 
     // 2. LIGHTING (Matched with OutsideScene)
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -293,11 +328,13 @@ export default function ARScene({ onExit }: ARSceneProps) {
     const controls = new PointerLockControls(camera, renderer.domElement);
 
     const blockClick = (e: MouseEvent) => {
-      if (!controls.isLocked) {
+      if (!mobileCheck && !controls.isLocked) {
         controls.lock();
       }
     };
-    renderer.domElement.addEventListener('click', blockClick);
+    if (!mobileCheck) {
+      renderer.domElement.addEventListener('click', blockClick);
+    }
 
     // Keyboard Movement State
     const moveState = { forward: false, backward: false, left: false, right: false };
@@ -1247,7 +1284,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
     const center = new THREE.Vector2(0, 0);
 
     const onMouseClick = (event: MouseEvent) => {
-      if (!controls.isLocked) return;
+      if (!mobileCheck && !controls.isLocked) return;
 
       // DROP LOGIC
       if (activePlacementTargetRef.current) {
@@ -1364,6 +1401,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       }
     };
     document.addEventListener('click', onMouseClick);
+    renderer.xr.getController(0).addEventListener('select', () => onMouseClick(null as any));
 
     // 6. RENDER LOOP
     const speed = 350.0;
@@ -2334,7 +2372,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       renderer.domElement.removeEventListener('click', blockClick);
       window.removeEventListener('resize', onWindowResize);
       if (containerRef.current) containerRef.current.innerHTML = '';
-      if (vrButton.parentNode) vrButton.parentNode.removeChild(vrButton);
+      if (xrButton && xrButton.parentNode) xrButton.parentNode.removeChild(xrButton);
     };
   }, []);
 
@@ -2721,7 +2759,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       })()}
 
       {/* Desktop Instruction Overlay */}
-      {!loading && !showNunDialog && (
+      {!loading && !showNunDialog && !isMobile && (
         <div style={{ position: 'absolute', bottom: '20px', left: '20px', color: 'white', backgroundColor: 'rgba(0,0,0,0.5)', padding: '15px', borderRadius: '8px', zIndex: 10, pointerEvents: 'none' }}>
           <h4 style={{ margin: '0 0 10px 0' }}>Desktop Controls</h4>
           <p style={{ margin: '5px 0', fontSize: '0.9rem' }}>• <strong>Click anywhere</strong> to lock mouse & look around</p>
