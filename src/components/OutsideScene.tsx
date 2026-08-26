@@ -270,8 +270,15 @@ export default function ARScene({ onExit }: ARSceneProps) {
       xrButton.style.zIndex = '100';
       document.body.appendChild(xrButton);
       
+      // Fake VR Skybox: A massive inverted sphere to permanently block the AR real-world camera feed
+      const vrSkyboxGeo = new THREE.SphereGeometry(900, 32, 32);
+      const vrSkyboxMat = new THREE.MeshBasicMaterial({ color: 0x050508, side: THREE.BackSide });
+      const vrSkybox = new THREE.Mesh(vrSkyboxGeo, vrSkyboxMat);
+      scene.add(vrSkybox);
+      
       renderer.xr.addEventListener('sessionstart', () => {
-        // Keep the dark space background instead of null, to simulate VR without seeing the real world.
+        // We added a physical skybox sphere to block the camera feed, so background doesn't matter,
+        // but we ensure it's dark just in case.
       });
       renderer.xr.addEventListener('sessionend', () => {
         scene.background = new THREE.Color(0x050508); // Restore space background
