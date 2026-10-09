@@ -8,6 +8,7 @@ export default withAuth({
 
 export const config = {
   matcher: [
-    "/", // Protect home/AR scene
+    "/",
+    "/scene" // Protect AR scene
   ],
 };
