@@ -38,7 +38,7 @@ export default function PrivateRoomScene() {
   // Physics and controls
   const worldOctree = useRef(new Octree());
   const controlsRef = useRef<PointerLockControls | null>(null);
-  const playerCollider = useRef(new Capsule(new THREE.Vector3(-2, 0.35, -2), new THREE.Vector3(-2, 1.5, -2), 0.35));
+  const playerCollider = useRef(new Capsule(new THREE.Vector3(-2, 0.18, -2), new THREE.Vector3(-2, 0.72, -2), 0.18));
   const playerVelocity = useRef(new THREE.Vector3());
   const playerDirection = useRef(new THREE.Vector3());
   const playerOnFloor = useRef(false);
@@ -112,7 +112,7 @@ export default function PrivateRoomScene() {
 
     // Light specifically to illuminate the avatar (radius limited to 3 meters)
     const avatarLight = new THREE.PointLight(0xaaccff, 2.0, 3);
-    avatarLight.position.set(-0.5, 1.5, -1.0);
+    avatarLight.position.set(-0.5, 0.8, -1.0);
     scene.add(avatarLight);
     avatarLightRef.current = avatarLight;
 
@@ -164,7 +164,7 @@ export default function PrivateRoomScene() {
         toCam.y = 0;
         toCam.normalize();
         // Place light slightly above avatar's head, offset towards the camera so the face is beautifully lit
-        avatarLightRef.current.position.copy(avatarGroup.current.position).add(new THREE.Vector3(0, 1.5, 0)).add(toCam.multiplyScalar(0.8));
+        avatarLightRef.current.position.copy(avatarGroup.current.position).add(new THREE.Vector3(0, 0.8, 0)).add(toCam.multiplyScalar(0.8));
       }
 
       // Update avatar animations
@@ -308,12 +308,12 @@ export default function PrivateRoomScene() {
           // Adjusted upward and slightly forward
           avatarGroup.current.position.set(-0.5, 0.05, -3.15); // Pushed back onto the seat
 
-          // Lock player view and height! Moved slightly to the right (X: 0.0 instead of -0.5)
-          playerCollider.current.start.set(0.0, 0.2, -2.0);
-          playerCollider.current.end.set(0.0, 0.7, -2.0);
+          // Lock player view and height to seated eye level! Moved slightly to the right (X: 0.0 instead of -0.5)
+          playerCollider.current.start.set(0.0, 0.15, -2.0);
+          playerCollider.current.end.set(0.0, 0.55, -2.0);
           if (cameraRef.current && avatarGroup.current) {
             const lookTarget = avatarGroup.current.position.clone();
-            lookTarget.y = 0.7; // face height
+            lookTarget.y = 0.55; // face height when seated
             cameraRef.current.lookAt(lookTarget);
           }
 
@@ -460,10 +460,13 @@ export default function PrivateRoomScene() {
       const deltaPosition = playerVelocity.current.clone().multiplyScalar(deltaTime);
       playerCollider.current.translate(deltaPosition);
 
-      // Lock player Y to a flat plane for 60 FPS performance!
+      // Lock player Y to eye-level matching avatar height (same as outside environment)
       // The high-poly cave mesh causes 2 FPS drops when raycasting every frame.
-      playerCollider.current.start.y = 0.5;
-      playerCollider.current.end.y = 1.5; // Match avatar eye-level precisely
+      const isSeated = convStateRef.current === 'STORY_SOFA';
+      const targetEyeY = isSeated ? 0.55 : 0.72;
+      const targetStartY = isSeated ? 0.15 : 0.18;
+      playerCollider.current.start.y = targetStartY;
+      playerCollider.current.end.y = targetEyeY; // Match avatar eye-level precisely (0.45 scale avatar)
 
 
       // Resolve player collisions using Octree!
@@ -492,6 +495,7 @@ export default function PrivateRoomScene() {
         }
       }
 
+      playerCollider.current.end.y = targetEyeY;
       camera.position.copy(playerCollider.current.end);
 
       renderer.render(scene, camera);
