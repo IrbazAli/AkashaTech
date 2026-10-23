@@ -198,6 +198,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
   const groundTubeCenterRef = useRef<THREE.Vector3 | null>(null);
   const groundTubeRadiusRef = useRef<number>(0);
   const groundDoorsRef = useRef<{ mesh: THREE.Mesh, side: 'left' | 'right', initialZ: number, isOpen: boolean }[]>([]);
+  const lastLogTimeRef = useRef<number>(0);
+  const prevInGroundTubeRef = useRef<boolean>(false);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const activePlacementTargetRef = useRef<THREE.Group | null>(null);
@@ -260,6 +262,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
     renderer.xr.enabled = true;
 
     containerRef.current.innerHTML = '';
+    renderer.domElement.style.pointerEvents = 'auto';
     containerRef.current.appendChild(renderer.domElement);
 
     let xrButton: HTMLElement | null = null;
@@ -395,18 +398,69 @@ export default function ARScene({ onExit }: ARSceneProps) {
       isMovementLockedRef.current = false;
     });
 
-    const blockClick = (e: MouseEvent) => {
-      if (!mobileCheck && !controls.isLocked) {
+    const handlePointerLock = (e: MouseEvent) => {
+      if (mobileCheck) return;
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.closest('button') || target.closest('input') || target.closest('#vr-joystick-zone'))) {
+        return;
+      }
+      if (!controls.isLocked && !isMovementLockedRef.current) {
         controls.lock();
       }
     };
+
+    let isMouseDown = false;
+    let prevMouseX = 0;
+    let prevMouseY = 0;
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (mobileCheck) return;
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.closest('button') || target.closest('input') || target.closest('#vr-joystick-zone'))) return;
+      isMouseDown = true;
+      prevMouseX = e.clientX;
+      prevMouseY = e.clientY;
+    };
+
+    const onMouseUp = () => {
+      isMouseDown = false;
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (mobileCheck) return;
+      if (controls.isLocked) return;
+
+      if (isMouseDown) {
+        const movementX = e.clientX - prevMouseX;
+        const movementY = e.clientY - prevMouseY;
+        prevMouseX = e.clientX;
+        prevMouseY = e.clientY;
+
+        const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+        euler.setFromQuaternion(camera.quaternion);
+        euler.y -= movementX * 0.0025;
+        euler.x -= movementY * 0.0025;
+        euler.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, euler.x));
+        camera.quaternion.setFromEuler(euler);
+      }
+    };
+
     if (!mobileCheck) {
-      renderer.domElement.addEventListener('click', blockClick);
+      renderer.domElement.addEventListener('click', handlePointerLock);
+      window.addEventListener('click', handlePointerLock);
+      window.addEventListener('mousedown', onMouseDown);
+      window.addEventListener('mouseup', onMouseUp);
+      window.addEventListener('mousemove', onMouseMove);
     }
 
     // Keyboard Movement State
     const moveState = { forward: false, backward: false, left: false, right: false };
     const onKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) return;
+      if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
+        console.error(`[KEY PRESS] ${e.code} | isLocked=${controls.isLocked} | moveLocked=${isMovementLockedRef.current}`);
+      }
       if (isMovementLockedRef.current) return;
       switch (e.code) {
         case 'KeyW': moveState.forward = true; break;
@@ -768,6 +822,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
       glassDoors = cache.glassDoors || [];
       occupiedMapRef.current = cache.assignments;
       setOccupiedMap(cache.assignments);
+      if (cache.groundTubeCenter) groundTubeCenterRef.current = cache.groundTubeCenter;
+      if (cache.groundTubeRadius) groundTubeRadiusRef.current = cache.groundTubeRadius;
+      if (cache.groundElevatorGroup) scene.add(cache.groundElevatorGroup);
       setPhysicsLoading(false);
       setLoading(false);
 
@@ -1033,6 +1090,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
             chamberDoorPositions,
             glassDoors,
             assignments: occupiedMapRef.current,
+            groundTubeCenter: groundTubeCenterRef.current,
+            groundTubeRadius: groundTubeRadiusRef.current,
+            groundElevatorGroup: groundElevatorGroup,
           };
 
           setPhysicsLoading(false);
@@ -1532,6 +1592,15 @@ export default function ARScene({ onExit }: ARSceneProps) {
         const diff = validFloorHit.point.y - playerCollider.start.y;
         playerCollider.translate(new THREE.Vector3(0, diff, 0));
         playerVelocity.y = Math.max(0, playerVelocity.y);
+      }
+
+      if (groundTubeCenterRef.current) {
+        const dx = playerCollider.start.x - groundTubeCenterRef.current.x;
+        const dz = playerCollider.start.z - groundTubeCenterRef.current.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist < 40.0 && performance.now() - lastLogTimeRef.current > 1000) {
+          console.error(`[COLLISION LOG] Near Beam (${dist.toFixed(1)}m): FloorHit=${validFloorHit ? `${validFloorHit.object.name} (dist=${validFloorHit.distance.toFixed(2)}, y=${validFloorHit.point.y.toFixed(2)})` : 'NONE'} | onFloor=${playerOnFloor}`);
+        }
       }
 
       // 2. Spaceship Wall Collisions (Using robust Octree)
@@ -2196,7 +2265,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
 
       // Desktop & Mobile Movement Logic (Octree & Capsule)
-      if (controls.isLocked || mobileCheck) {
+      // Unlocked: WASD always moves character on PC
+      if (true) {
         // Calculate forward/right vectors based on camera yaw
         const camDir = new THREE.Vector3();
         camera.getWorldDirection(camDir);
@@ -2246,9 +2316,48 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
         for (let i = 0; i < STEPS_PER_FRAME; i++) {
 
+          // iFly Zero-Gravity Chamber Pre-Check (inside spaceship)
+          let isCurrentlyInTube = false;
+          let distToTubeCenter = 0;
+
+          if (tubeCenterRef.current) {
+            const tempDx = playerCollider.start.x - tubeCenterRef.current.x;
+            const tempDz = playerCollider.start.z - tubeCenterRef.current.z;
+            const tempRadius = Math.max(2.0, tubeRadiusRef.current);
+            if (Math.sqrt(tempDx * tempDx + tempDz * tempDz) < tempRadius && playerCollider.start.y >= 140.0) {
+              isCurrentlyInTube = true;
+            }
+          }
+
+          // Ground Beam Pre-Check (under spaceship)
+          let isCurrentlyInGroundTube = false;
+          let distToGroundTubeCenter = 0;
+
+          if (groundTubeCenterRef.current && !(window as any).__PLAYER_ON_SPACESHIP__) {
+            const tempDx = playerCollider.start.x - groundTubeCenterRef.current.x;
+            const tempDz = playerCollider.start.z - groundTubeCenterRef.current.z;
+            const curDist = Math.sqrt(tempDx * tempDx + tempDz * tempDz);
+            const tempRadius = Math.max(2.0, groundTubeRadiusRef.current);
+
+            // While airborne and ascending to spaceship, keep player securely in beam so slight WASD drift cannot drop them
+            const isAirborneAscending = prevInGroundTubeRef.current && enteredFromGroundRef.current && playerCollider.start.y > -8.0 && playerCollider.start.y < 140.0;
+
+            if ((curDist < tempRadius || isAirborneAscending) && playerCollider.start.y < 140.0) {
+              isCurrentlyInGroundTube = true;
+            }
+
+            if (isCurrentlyInGroundTube !== prevInGroundTubeRef.current) {
+              prevInGroundTubeRef.current = isCurrentlyInGroundTube;
+              console.log(`[BEAM TRIGGER EVENT] inGroundTube: ${isCurrentlyInGroundTube} at Pos: (${playerCollider.start.x.toFixed(1)}, ${playerCollider.start.y.toFixed(1)}, ${playerCollider.start.z.toFixed(1)}) | Dist: ${curDist.toFixed(1)} / Radius: ${tempRadius.toFixed(1)}`);
+            }
+          }
+
           let damping = Math.exp(-4 * dt) - 1;
 
-          if (!playerOnFloor) {
+          if (isCurrentlyInGroundTube) {
+            // Inside beam: Zero out vertical gravity so it does not fight the lift
+            playerVelocity.y = 0;
+          } else if (!playerOnFloor) {
             if (envGroup) { playerVelocity.y -= 30 * dt; } else { playerVelocity.y = 0; } // GRAVITY
             damping = Math.exp(-1.5 * dt) - 1; // Less air resistance
           }
@@ -2264,90 +2373,18 @@ export default function ARScene({ onExit }: ARSceneProps) {
           const deltaPos = playerVelocity.clone().multiplyScalar(dt);
           playerCollider.translate(deltaPos);
 
-          // iFly Zero-Gravity Chamber Pre-Check
-          // We must know if we are in the tube BEFORE resolving octree collisions 
-          // so we can bypass floor ceilings when floating upwards.
-          let isCurrentlyInTube = false;
-          let distToTubeCenter = 0;
-
-          if (tubeCenterRef.current) {
-            const tempDx = playerCollider.start.x - tubeCenterRef.current.x;
-            const tempDz = playerCollider.start.z - tubeCenterRef.current.z;
-            const tempRadius = Math.max(2.0, tubeRadiusRef.current * 11.5);
-            if (Math.sqrt(tempDx * tempDx + tempDz * tempDz) < tempRadius && playerCollider.start.y >= 140.0) {
-              isCurrentlyInTube = true;
-            }
-          }
-
-          // Ground Chamber Pre-Check
-          let isCurrentlyInGroundTube = false;
-          let distToGroundTubeCenter = 0;
-
-          if (groundTubeCenterRef.current) {
-            const tempDx = playerCollider.start.x - groundTubeCenterRef.current.x;
-            const tempDz = playerCollider.start.z - groundTubeCenterRef.current.z;
-            const tempRadius = Math.max(2.0, groundTubeRadiusRef.current * 0.95);
-            // Keep lifting until they are slightly ABOVE the spaceship floor (163.05)
-            // so that when octree takes over, they smoothly drop 0.05m onto the floor instead of getting stuck inside it.
-            if (Math.sqrt(tempDx * tempDx + tempDz * tempDz) < tempRadius && playerCollider.start.y < 160.05) {
-              isCurrentlyInGroundTube = true;
-            }
-          }
-
           // Resolve Collisions with Octree ONLY if outside BOTH tubes
           if (!isCurrentlyInTube && !isCurrentlyInGroundTube) {
             playerCollisions();
           }
 
-          // iFly Zero-Gravity Chamber Boundary Clamping
-
+          // iFly Zero-Gravity Chamber (inside spaceship only, NO BOUNDARY CLAMPING)
           if (tubeCenterRef.current) {
             const dx = playerCollider.start.x - tubeCenterRef.current.x;
             const dz = playerCollider.start.z - tubeCenterRef.current.z;
             distToTubeCenter = Math.sqrt(dx * dx + dz * dz);
-
-            // Allow a tiny margin of error inside the tube
-            const activeRadius = Math.max(2.0, tubeRadiusRef.current * 11.5);
-
-            // Doorway is defined by being within 3.5 units of ANY door (glass or metal) on the current floor, regardless of if it's open
-            const currentFloorY = targetFloorYRef.current;
-            const isDoorway = chamberDoorPositions.some(door => {
-              return Math.abs(door.floorY - currentFloorY) < 3.0 &&
-                Math.sqrt(Math.pow(door.pos.x - playerCollider.start.x, 2) + Math.pow(door.pos.z - playerCollider.start.z, 2)) < 4.0;
-            }) || glassDoors.some(door => {
-              const doorPos = new THREE.Vector3();
-              door.mesh.getWorldPosition(doorPos);
-              return Math.abs(door.floorY - currentFloorY) < 3.0 &&
-                Math.sqrt(Math.pow(doorPos.x - playerCollider.start.x, 2) + Math.pow(doorPos.z - playerCollider.start.z, 2)) < 4.0;
-            });
-
-            if (!isDoorway) {
-              // Glass Boundary Clamping
-              if (inTubeRef.current && distToTubeCenter >= activeRadius - 0.2) {
-                // Clamp inside
-                const normalizeX = dx / distToTubeCenter;
-                const normalizeZ = dz / distToTubeCenter;
-                playerCollider.translate(new THREE.Vector3(
-                  (normalizeX * (activeRadius - 0.2)) - dx,
-                  0,
-                  (normalizeZ * (activeRadius - 0.2)) - dz
-                ));
-              } else if (!inTubeRef.current && distToTubeCenter <= activeRadius + 0.2) {
-                // Clamp outside
-                const normalizeX = dx / distToTubeCenter;
-                const normalizeZ = dz / distToTubeCenter;
-                playerCollider.translate(new THREE.Vector3(
-                  (normalizeX * (activeRadius + 0.2)) - dx,
-                  0,
-                  (normalizeZ * (activeRadius + 0.2)) - dz
-                ));
-              }
-            }
-
-            // Recalculate distance in case it was clamped
-            const newDx = playerCollider.start.x - tubeCenterRef.current.x;
-            const newDz = playerCollider.start.z - tubeCenterRef.current.z;
-            isCurrentlyInTube = Math.sqrt(newDx * newDx + newDz * newDz) < activeRadius && playerCollider.start.y >= 140.0;
+            const activeRadius = Math.max(2.0, tubeRadiusRef.current);
+            isCurrentlyInTube = distToTubeCenter < activeRadius && playerCollider.start.y >= 140.0;
           }
 
           updateInTube(isCurrentlyInTube);
@@ -2362,32 +2399,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
             playerCollider.translate(new THREE.Vector3(0, stepY, 0));
           }
 
-          // Ground Glass Boundary Clamping
-          if (groundTubeCenterRef.current) {
-            const gx = playerCollider.start.x - groundTubeCenterRef.current.x;
-            const gz = playerCollider.start.z - groundTubeCenterRef.current.z;
-            distToGroundTubeCenter = Math.sqrt(gx * gx + gz * gz);
-            const gActiveRadius = Math.max(2.0, groundTubeRadiusRef.current * 0.95);
+          // NO BOUNDARY CLAMPING: Zero locks anywhere around the beam or on the spaceship floor!
 
-            // Is near ground door?
-            const isGroundDoorway = groundDoorsRef.current.some(door => {
-              const doorPos = new THREE.Vector3();
-              door.mesh.getWorldPosition(doorPos);
-              return Math.abs(doorPos.y - playerCollider.start.y) < 5.0 &&
-                Math.sqrt(Math.pow(doorPos.x - playerCollider.start.x, 2) + Math.pow(doorPos.z - playerCollider.start.z, 2)) < 4.0;
-            });
 
-            if (!isGroundDoorway && isCurrentlyInGroundTube && distToGroundTubeCenter >= gActiveRadius - 0.2) {
-              // Clamp inside
-              const normalizeX = gx / distToGroundTubeCenter;
-              const normalizeZ = gz / distToGroundTubeCenter;
-              playerCollider.translate(new THREE.Vector3(
-                (normalizeX * (gActiveRadius - 0.2)) - gx,
-                0,
-                (normalizeZ * (gActiveRadius - 0.2)) - gz
-              ));
-            }
-          }
 
           if (isCurrentlyInGroundTube) {
             // Track if player started from the ground, to avoid triggering transition when taking inner elevator DOWN
@@ -2395,6 +2409,16 @@ export default function ARScene({ onExit }: ARSceneProps) {
               enteredFromGroundRef.current = true;
             } else if (playerCollider.start.y >= 160.0) {
               enteredFromGroundRef.current = false;
+            }
+
+            // Gently guide player towards beam center as they ascend
+            if (groundTubeCenterRef.current && playerCollider.start.y > -8.0) {
+              const gx = playerCollider.start.x - groundTubeCenterRef.current.x;
+              const gz = playerCollider.start.z - groundTubeCenterRef.current.z;
+              const centerPull = Math.min(1.0, 4.0 * dt);
+              playerCollider.translate(new THREE.Vector3(-gx * centerPull, 0, -gz * centerPull));
+              playerVelocity.x *= 0.8;
+              playerVelocity.z *= 0.8;
             }
 
             // Trigger transition earlier (below where the beam ends) so the view doesn't clip into the spaceship bottom
@@ -2507,7 +2531,13 @@ export default function ARScene({ onExit }: ARSceneProps) {
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
       document.removeEventListener('click', onMouseClick);
-      renderer.domElement.removeEventListener('click', blockClick);
+      if (!mobileCheck) {
+        renderer.domElement.removeEventListener('click', handlePointerLock);
+        window.removeEventListener('click', handlePointerLock);
+        window.removeEventListener('mousedown', onMouseDown);
+        window.removeEventListener('mouseup', onMouseUp);
+        window.removeEventListener('mousemove', onMouseMove);
+      }
       window.removeEventListener('resize', onWindowResize);
       if (containerRef.current) containerRef.current.innerHTML = '';
       if (xrButton && xrButton.parentNode) xrButton.parentNode.removeChild(xrButton);
@@ -2548,7 +2578,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       </div>
       
       {/* 3D Canvas Container */}
-      <div ref={containerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 }} />
+      <div ref={containerRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'auto', cursor: 'grab' }} />
 
       {/* Loading Screen */}
       {loading && (
