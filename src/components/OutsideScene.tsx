@@ -14,7 +14,7 @@ import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockCont
 import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 // @ts-ignore
 import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
-import { Octree } from 'three/examples/jsm/math/Octree.js';
+import { SpaceshipWalls } from '../lib/spaceshipWalls';
 // @ts-ignore
 import { Capsule } from 'three/examples/jsm/math/Capsule.js';
 import { Lipsync } from 'wawa-lipsync';
@@ -356,7 +356,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
     pmremGenerator.compileEquirectangularShader();
     scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 
-    // 3. PHYSICS ENGINE (Octree & Capsule)
+    // 3. PHYSICS (shared shell geometry for walls, downward raycasts for floors)
     const playerCollider = new Capsule(
       new THREE.Vector3(camera.position.x, camera.position.y - 4, camera.position.z),
       new THREE.Vector3(camera.position.x, camera.position.y - 1.5, camera.position.z),
@@ -372,10 +372,10 @@ export default function ARScene({ onExit }: ARSceneProps) {
       0.25
     );
 
-    let worldOctree = new Octree();
+    const spaceshipWalls = new SpaceshipWalls();
+    const physicalMovement = new THREE.Vector3();
 
     const floorRaycaster = new THREE.Raycaster();
-    const wallRaycaster = new THREE.Raycaster();
     const controls = new PointerLockControls(camera, renderer.domElement);
     controls.addEventListener('lock', () => {
       // Failsafe: if the pointer locks successfully, we MUST unlock movement 
@@ -760,6 +760,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       spaceshipGroup = gltf.scene;
       spaceshipGroup.position.set(54.62, 150, 0);
       scene.add(spaceshipGroup!);
+      spaceshipWalls.setFromSpaceship(spaceshipGroup);
 
       if (gltf.animations && gltf.animations.length > 0) {
         // Strip out any baked jaw animations so Wawa-Lipsync has full control
@@ -1528,7 +1529,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
     function playerCollisions() {
       if (!spaceshipGroup && !envGroup) return false;
-      let collisionOccurred = false;
       playerOnFloor = false;
 
       // 1. Floor Raycasting (Handles Gravity & Outside Terrain)
@@ -1561,25 +1561,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
         playerCollider.translate(new THREE.Vector3(0, diff, 0));
         playerVelocity.y = Math.max(0, playerVelocity.y);
       }
-
-
-
-      // 2. Spaceship Wall Collisions (Using robust Octree)
-      const result = worldOctree.capsuleIntersect(playerCollider);
-      if (result) {
-        collisionOccurred = true;
-        // If the normal is horizontal (wall) or ceiling, or if we weren't on the floor
-        if (result.normal.y <= 0.1 || !playerOnFloor) {
-          playerCollider.translate(result.normal.multiplyScalar(result.depth));
-        }
-        // If we hit a wall, stop velocity
-        if (Math.abs(result.normal.y) <= 0.1) {
-          playerVelocity.x = 0;
-          playerVelocity.z = 0;
-        }
-      }
-
-      return collisionOccurred;
+      return playerOnFloor;
     }
 
     let lastTime = performance.now();
@@ -2222,7 +2204,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       }
 
 
-      // Desktop & Mobile Movement Logic (Octree & Capsule)
+      // Desktop & Mobile Movement Logic
       // Unlocked: WASD always moves character on PC
       if (true) {
         // Calculate forward/right vectors based on camera yaw
@@ -2242,7 +2224,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
         let moveX = Number(moveState.right) - Number(moveState.left);
 
         // --- AR Physical Movement Translation ---
-        // Map physical walking into the playerCollider so collisions are respected!
+        // Sweep physical walking before moving the collider, just like keyboard input.
+        physicalMovement.set(0, 0, 0);
         const isPresenting = renderer.xr.isPresenting;
         if (mobileCheck && isPresenting) {
           if (!wasPresenting) {
@@ -2254,7 +2237,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
             
             if (Math.abs(deltaX) > 0.0001 || Math.abs(deltaZ) > 0.0001) {
               // Apply 10x multiplier to physical movement
-              playerCollider.translate(new THREE.Vector3(deltaX * 10.0, 0, deltaZ * 10.0));
+              physicalMovement.set(deltaX * 10.0, 0, deltaZ * 10.0);
             }
             previousCameraLocalPos.copy(camera.position);
           }
@@ -2320,11 +2303,16 @@ export default function ARScene({ onExit }: ARSceneProps) {
           if (moveZ !== 0) playerVelocity.addScaledVector(camDir, moveZ * acceleration * dt);
           if (moveX !== 0) playerVelocity.addScaledVector(camRight, moveX * acceleration * dt);
 
-          // Translate Capsule
+          // Sweep horizontal movement before translation so thin walls cannot be
+          // skipped by a fast keyboard step or amplified phone tracking movement.
           const deltaPos = playerVelocity.clone().multiplyScalar(dt);
+          deltaPos.addScaledVector(physicalMovement, 1 / STEPS_PER_FRAME);
+          spaceshipWalls.constrain(
+            playerCollider.start, deltaPos, playerCollider.radius, 4.0, playerVelocity,
+          );
           playerCollider.translate(deltaPos);
 
-          // Resolve Collisions with Octree ONLY if outside BOTH tubes
+          // Preserve floor bypass inside elevators; horizontal shell walls still apply.
           if (!isCurrentlyInTube && !isCurrentlyInGroundTube) {
             playerCollisions();
           }
@@ -2479,6 +2467,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
     return () => {
       isMounted = false;
       renderer.setAnimationLoop(null);
+      spaceshipWalls.dispose();
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
       document.removeEventListener('click', onMouseClick);
