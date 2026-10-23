@@ -198,7 +198,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
   const groundTubeCenterRef = useRef<THREE.Vector3 | null>(null);
   const groundTubeRadiusRef = useRef<number>(0);
   const groundDoorsRef = useRef<{ mesh: THREE.Mesh, side: 'left' | 'right', initialZ: number, isOpen: boolean }[]>([]);
-  const lastLogTimeRef = useRef<number>(0);
   const prevInGroundTubeRef = useRef<boolean>(false);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -444,9 +443,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
     const onKeyDown = (e: KeyboardEvent) => {
       const activeEl = document.activeElement;
       if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) return;
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) {
-        console.error(`[KEY PRESS] ${e.code} | isLocked=${controls.isLocked} | moveLocked=${isMovementLockedRef.current}`);
-      }
       if (isMovementLockedRef.current) return;
       switch (e.code) {
         case 'KeyW': moveState.forward = true; break;
@@ -748,9 +744,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
       let spawnY = 0;
       if (spawnHits.length > 0) {
         spawnY = spawnHits[0].point.y;
-        console.log('[SPAWN DEBUG] Terrain hit at X: 120, Z: 40! Height is: ', spawnY);
-      } else {
-        console.error('[SPAWN DEBUG] NO TERRAIN FOUND at X: 120, Z: 40! Falling into the abyss!');
       }
 
       playerCollider.start.set(120.0, spawnY + 2.0, 40.0);
@@ -771,7 +764,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       if (gltf.animations && gltf.animations.length > 0) {
         // Strip out any baked jaw animations so Wawa-Lipsync has full control
         gltf.animations.forEach((clip: THREE.AnimationClip) => {
-          console.log(clip.name, clip.tracks.map(t => t.name)); clip.tracks = clip.tracks.filter(track => !track.name.toLowerCase().includes('jaw'));
+          clip.tracks = clip.tracks.filter(track => !track.name.toLowerCase().includes('jaw'));
         });
 
         spaceshipMixer = new THREE.AnimationMixer(spaceshipGroup!);
@@ -1214,8 +1207,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
       // 1. Static dimensions as requested (no more dynamic raycasting)
       const hitDistance = 9.8;
 
-      console.error(`[NFT DEBUG] Using STATIC Room Radius: ${hitDistance}`);
-
       // We are inside looking OUT. 
       // Wall is at hitDistance. Background should be slightly closer to us, murals slightly closer than background.
       const R_bg = hitDistance - 0.1;
@@ -1223,8 +1214,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
       const thetaLength = width / R_mural;
       const fullCircle = Math.PI * 2;
-
-      console.error(`[NFT DEBUG] Generating FULL White BG Cylinder | Radius: ${R_bg} | Position: ${cx}, ${muralY}, ${cz}`);
 
       // 2. Create the solid white background wall (Full Circle)
       const bgGeometry = new THREE.CylinderGeometry(R_bg, R_bg, height + 0.5, 64, 1, true, 0, fullCircle);
@@ -1239,9 +1228,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
       const textureLoader = new THREE.TextureLoader();
 
       const addMural = (url: string, angleOffset: number) => {
-        console.error(`[NFT DEBUG] Requesting to load NFT: ${url} at angle offset: ${angleOffset}`);
         textureLoader.load(url, (texture) => {
-          console.error(`[NFT DEBUG] Successfully loaded texture: ${url}`);
           texture.colorSpace = THREE.SRGBColorSpace;
 
           // Flip the texture horizontally because we are looking at the INSIDE of the cylinder
@@ -1265,10 +1252,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
           mesh.userData.muralType = url.includes('tree') ? 'tree' : 'statue';
           
           scene.add(mesh);
-
-          console.error(`[NFT DEBUG] Added NFT mesh to scene: ${url} at Radius ${R_mural}`);
         }, undefined, (err) => {
-          console.error(`[NFT DEBUG] FAILED to load texture: ${url}`, err);
+          console.warn("Failed to load texture:", url, err);
         });
       };
 
@@ -1407,7 +1392,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
         // DROP LOGIC
         if (activePlacementTargetRef.current) {
-          console.log("[NFT Placement] Dropped object.");
           
           // Save new coordinates to DB
           if (activePlacementTargetRef.current.userData.nftId) {
@@ -1506,10 +1490,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
           const isOwner = session?.user?.id === nftRoot.userData.ownerId;
           const isAdmin = session?.user?.role === "ADMIN";
           if (!isOwner && !isAdmin && session?.user?.id) {
-             console.log("Only owner or admin can move this NFT!");
              return;
           }
-          console.log("[NFT Placement] Picked up object.");
           activePlacementTargetRef.current = nftRoot;
           return; // Consume click
         }
@@ -1580,14 +1562,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
         playerVelocity.y = Math.max(0, playerVelocity.y);
       }
 
-      if (groundTubeCenterRef.current) {
-        const dx = playerCollider.start.x - groundTubeCenterRef.current.x;
-        const dz = playerCollider.start.z - groundTubeCenterRef.current.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        if (dist < 40.0 && performance.now() - lastLogTimeRef.current > 1000) {
-          console.error(`[COLLISION LOG] Near Beam (${dist.toFixed(1)}m): FloorHit=${validFloorHit ? `${validFloorHit.object.name} (dist=${validFloorHit.distance.toFixed(2)}, y=${validFloorHit.point.y.toFixed(2)})` : 'NONE'} | onFloor=${playerOnFloor}`);
-        }
-      }
+
 
       // 2. Spaceship Wall Collisions (Using robust Octree)
       const result = worldOctree.capsuleIntersect(playerCollider);
@@ -1760,12 +1735,11 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
           const nichePos = new THREE.Vector3();
           const box = new THREE.Box3().setFromObject(targetMesh);
-          box.getCenter(nichePos); const size = new THREE.Vector3(); box.getSize(size); console.log(`[NICHE DEBUG] Niche-name: ${targetMesh.name}, Center: ${nichePos.x}, ${nichePos.y}, ${nichePos.z} | Size: ${size.x}, ${size.y}, ${size.z}`);
+          box.getCenter(nichePos);
 
           // Draw an L-shaped path! First straight down the hallway, then turn to the wall.
           const cornerPos = new THREE.Vector3(nichePos.x, startPos.y, startPos.z);
           const targetPos = new THREE.Vector3(nichePos.x, startPos.y, nichePos.z);
-          console.log(`[PAW DEBUG - ${Date.now()}] Target Niche Position (Center): X=${nichePos.x.toFixed(3)}, Y=${nichePos.y.toFixed(3)}, Z=${nichePos.z.toFixed(3)}`);
 
           const dist1 = startPos.distanceTo(cornerPos);
           const dist2 = cornerPos.distanceTo(targetPos);
@@ -1846,7 +1820,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
             }
 
             pawGroupRef.current.add(pawClone);
-            console.log(`[PAW DEBUG - ${Date.now()}] Paw ${i}/${numPaws} placed at X=${pawClone.position.x.toFixed(3)}, Y=${pawClone.position.y.toFixed(3)}, Z=${pawClone.position.z.toFixed(3)}`);
           }
 
           lastPawTargetRef.current = currentPawTarget;
@@ -1953,7 +1926,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
               const validFloor = hits.find(h => h.object.name && !h.object.name.toLowerCase().includes('glass') && !h.object.name.toLowerCase().includes('niche'));
               if (validFloor) {
                 avatarGroup.position.y = validFloor.point.y; // Snap exactly to the floor height
-                if (Math.random() < 0.05) console.log(`[NUN WALK DEBUG] X: ${avatarGroup.position.x.toFixed(2)}, Z: ${avatarGroup.position.z.toFixed(2)} | Floor hit at Y: ${validFloor.point.y.toFixed(2)}`);
               }
             }
 
@@ -2328,7 +2300,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
 
             if (isCurrentlyInGroundTube !== prevInGroundTubeRef.current) {
               prevInGroundTubeRef.current = isCurrentlyInGroundTube;
-              console.log(`[BEAM TRIGGER EVENT] inGroundTube: ${isCurrentlyInGroundTube} at Pos: (${playerCollider.start.x.toFixed(1)}, ${playerCollider.start.y.toFixed(1)}, ${playerCollider.start.z.toFixed(1)}) | Dist: ${curDist.toFixed(1)} / Radius: ${tempRadius.toFixed(1)}`);
             }
           }
 
@@ -2926,12 +2897,10 @@ export default function ARScene({ onExit }: ARSceneProps) {
                   <span style={{ textTransform: 'capitalize' }}>{item.modelType}</span>
                   <button 
                     onClick={() => {
-                      console.error(`[NFT PLACEMENT LOG] Clicked Place for item: ${item.modelType} (ID: ${item.id})`);
                       setShowInventory(false);
                       setInventoryItems(prev => prev.filter(i => i.id !== item.id));
                       // Spawn logic
                       const modelUrl = item.modelType === 'statue' ? '/models/statue.glb' : '/models/grass-fountain.glb';
-                      console.error(`[NFT PLACEMENT LOG] Resolved model URL: ${modelUrl}`);
                       
                       try {
                         // @ts-ignore
@@ -2941,9 +2910,7 @@ export default function ARScene({ onExit }: ARSceneProps) {
                         loader.setDRACOLoader(draco);
                         loader.setMeshoptDecoder(MeshoptDecoder);
                         
-                        console.error(`[NFT PLACEMENT LOG] Calling loader.load...`);
                         loader.load(modelUrl, (gltf: any) => {
-                           console.error(`[NFT PLACEMENT LOG] Loader successfully loaded GLTF!`);
                            try {
                              const model = gltf.scene;
                              let rootObj = model;
@@ -2961,7 +2928,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
                              let topOffset = scaledBox.max.y - model.position.y;
                              
                              if (item.modelType === 'tree') {
-                                console.error(`[NFT PLACEMENT LOG] Constructing complex tree group...`);
                                 const nftTreeGroup = new THREE.Group();
                                 model.position.set(0, 0, 0);
                                 
@@ -2978,7 +2944,6 @@ export default function ARScene({ onExit }: ARSceneProps) {
                                 nftTreeGroup.add(model);
                                 
                                 loader.load('/models/tree.glb', (treeGltf: any) => {
-                                  console.error(`[NFT PLACEMENT LOG] Successfully loaded inner tree.glb`);
                                   const innerTree = treeGltf.scene;
                                   innerTree.traverse((child: any) => {
                                     if (child.isMesh && child.material && child.material.map) {
@@ -2991,25 +2956,20 @@ export default function ARScene({ onExit }: ARSceneProps) {
                                   });
                                   const tBox = new THREE.Box3().setFromObject(innerTree);
                                   const tMaxDim = Math.max(tBox.getSize(new THREE.Vector3()).y, 1);
-                                  // The bounding box of the tree GLB might be huge due to invisible bounds/cameras,
-                                  // making the tree appear tiny when scaled based on tMaxDim.
-                                  // We will multiply the scale by a massive factor to compensate.
                                   const tScale = 75.0 / tMaxDim;
                                   innerTree.scale.set(tScale, tScale, tScale);
                                   innerTree.updateMatrixWorld(true);
                                   innerTree.position.set(fCenter.x, topOffset, fCenter.z);
                                   nftTreeGroup.add(innerTree);
                                 }, undefined, (err: any) => {
-                                  console.error(`[NFT PLACEMENT LOG ERROR] Failed to load inner tree.glb:`, err);
+                                  console.warn("Failed to load inner tree.glb:", err);
                                 });
                                 rootObj = nftTreeGroup;
                              }
 
-                             console.error(`[NFT PLACEMENT LOG] Positioning model in front of camera...`);
                              const cam = cameraRef.current;
                              const scn = sceneRef.current;
                              if (!cam || !scn) {
-                               console.error(`[NFT PLACEMENT LOG ERROR] Camera or Scene ref is null!`);
                                return;
                              }
                              const dir = new THREE.Vector3(0,0,-1).applyQuaternion(cam.quaternion);
@@ -3032,22 +2992,20 @@ export default function ARScene({ onExit }: ARSceneProps) {
                              // @ts-ignore
                              rootObj.userData.ownerName = session?.user?.name || 'Unknown';
                              
-                             console.error(`[NFT PLACEMENT LOG] Adding to scene...`);
                              scn.add(rootObj);
                              
                              if (!scn.userData.placedNfts) scn.userData.placedNfts = [];
                              scn.userData.placedNfts.push(rootObj);
                              
                              activePlacementTargetRef.current = rootObj;
-                             console.error(`[NFT PLACEMENT LOG] activePlacementTargetRef.current set successfully! Model should be following cursor.`);
                            } catch (err: any) {
-                             console.error(`[NFT PLACEMENT LOG ERROR] Error processing loaded GLTF:`, err);
+                             console.warn("Error processing loaded GLTF:", err);
                            }
                         }, undefined, (err: any) => {
-                           console.error(`[NFT PLACEMENT LOG ERROR] loader.load failed:`, err);
+                           console.warn("loader.load failed:", err);
                         });
                       } catch (err: any) {
-                        console.error(`[NFT PLACEMENT LOG ERROR] Error initializing loader:`, err);
+                        console.warn("Error initializing loader:", err);
                       }
                     }}
                     style={{ padding: '5px 15px', backgroundColor: '#d4af37', color: 'black', border: 'none', borderRadius: '3px', cursor: 'pointer', fontWeight: 'bold' }}
