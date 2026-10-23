@@ -266,53 +266,10 @@ export default function ARScene({ onExit }: ARSceneProps) {
     containerRef.current.appendChild(renderer.domElement);
 
     let xrButton: HTMLElement | null = null;
+    let tryAutoStart: any = null;
+    let fallbackStart: any = null;
 
     if (mobileCheck) {
-      // Setup Joystick Touch Listeners before AR starts
-      const joystickZone = document.getElementById('vr-joystick-zone');
-      const joystickKnob = document.getElementById('vr-joystick-knob');
-      let touchId: number | null = null;
-      if (joystickZone && joystickKnob) {
-        const updateJoystick = (touch: any) => {
-          const rect = joystickZone.getBoundingClientRect();
-          const centerX = rect.left + rect.width / 2;
-          const centerY = rect.top + rect.height / 2;
-          let dx = touch.clientX - centerX;
-          let dy = touch.clientY - centerY;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          const maxDist = 50;
-          if (distance > maxDist) {
-            dx = (dx / distance) * maxDist;
-            dy = (dy / distance) * maxDist;
-          }
-          joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
-          joystickRef.current = { x: dx / maxDist, y: dy / maxDist };
-        };
-        const resetJoystick = (e: any) => {
-          for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === touchId) {
-              touchId = null;
-              joystickKnob.style.transform = `translate(0px, 0px)`;
-              joystickRef.current = { x: 0, y: 0 };
-            }
-          }
-        };
-        joystickZone.addEventListener('touchstart', (e: any) => {
-          e.preventDefault();
-          const touch = e.changedTouches[0];
-          touchId = touch.identifier;
-          updateJoystick(touch);
-        });
-        joystickZone.addEventListener('touchmove', (e: any) => {
-          e.preventDefault();
-          for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === touchId) updateJoystick(e.changedTouches[i]);
-          }
-        });
-        joystickZone.addEventListener('touchend', resetJoystick);
-        joystickZone.addEventListener('touchcancel', resetJoystick);
-      }
-
       // Use optionalFeatures instead of required so it works on older Android ARCore
       const vrOverlay = document.getElementById('ar-overlay-root');
       xrButton = ARButton.createButton(renderer, { 
@@ -323,6 +280,30 @@ export default function ARScene({ onExit }: ARSceneProps) {
       xrButton.style.zIndex = '100';
       document.body.appendChild(xrButton);
       
+      // Auto-enter AR on mobile / tablet (from commit 523f666)
+      tryAutoStart = setInterval(() => {
+        if (xrButton && !xrButton.disabled && xrButton.textContent?.includes('AR') && !xrButton.textContent?.includes('NOT SUPPORTED')) {
+          xrButton.click();
+          if (renderer.xr.isPresenting) {
+            clearInterval(tryAutoStart);
+          }
+        }
+      }, 150);
+
+      // Failsafe: Browsers often block auto-starting AR without a user tap. 
+      // This makes the first tap anywhere on the screen start the AR session.
+      fallbackStart = () => {
+        if (xrButton && !xrButton.disabled && xrButton.textContent?.includes('AR') && !xrButton.textContent?.includes('NOT SUPPORTED')) {
+          xrButton.click();
+        }
+        if (renderer.xr.isPresenting) {
+          window.removeEventListener('click', fallbackStart);
+          window.removeEventListener('touchstart', fallbackStart);
+        }
+      };
+      window.addEventListener('click', fallbackStart);
+      window.addEventListener('touchstart', fallbackStart);
+
       // Fake VR Skybox: A massive inverted sphere to permanently block the AR real-world camera feed
       const vrSkyboxGeo = new THREE.SphereGeometry(900, 32, 32);
       const vrSkyboxMat = new THREE.MeshBasicMaterial({ color: 0x050508, side: THREE.BackSide, depthWrite: false });
@@ -331,11 +312,16 @@ export default function ARScene({ onExit }: ARSceneProps) {
       cameraDolly.add(vrSkybox);
       
       renderer.xr.addEventListener('sessionstart', () => {
-        // We added a physical skybox sphere to block the camera feed, so background doesn't matter,
-        // but we ensure it's dark just in case.
+        if (xrButton) xrButton.style.display = 'none';
+        if (tryAutoStart) clearInterval(tryAutoStart);
+        if (fallbackStart) {
+          window.removeEventListener('click', fallbackStart);
+          window.removeEventListener('touchstart', fallbackStart);
+        }
       });
       renderer.xr.addEventListener('sessionend', () => {
         scene.background = new THREE.Color(0x050508); // Restore space background
+        if (xrButton) xrButton.style.display = 'block';
       });
     } else {
       xrButton = VRButton.createButton(renderer);
@@ -2279,15 +2265,9 @@ export default function ARScene({ onExit }: ARSceneProps) {
         if (camRight.lengthSq() < 0.0001) camRight.set(1, 0, 0);
         else camRight.normalize();
 
-        // Input movement
+        // Input movement (Keyboard on PC)
         let moveZ = Number(moveState.forward) - Number(moveState.backward);
         let moveX = Number(moveState.right) - Number(moveState.left);
-
-        // Fallback to joystick if no WASD input
-        if (moveZ === 0 && moveX === 0 && joystickRef.current) {
-          moveZ = -joystickRef.current.y;
-          moveX = joystickRef.current.x;
-        }
 
         // --- AR Physical Movement Translation ---
         // Map physical walking into the playerCollider so collisions are respected!
@@ -2538,6 +2518,11 @@ export default function ARScene({ onExit }: ARSceneProps) {
         window.removeEventListener('mouseup', onMouseUp);
         window.removeEventListener('mousemove', onMouseMove);
       }
+      if (tryAutoStart) clearInterval(tryAutoStart);
+      if (fallbackStart) {
+        window.removeEventListener('click', fallbackStart);
+        window.removeEventListener('touchstart', fallbackStart);
+      }
       window.removeEventListener('resize', onWindowResize);
       if (containerRef.current) containerRef.current.innerHTML = '';
       if (xrButton && xrButton.parentNode) xrButton.parentNode.removeChild(xrButton);
@@ -2547,8 +2532,8 @@ export default function ARScene({ onExit }: ARSceneProps) {
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <div id="ar-overlay-root" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, pointerEvents: 'none' }}>
-      {/* Mobile VR Joystick Overlay */}
-      <div id="vr-joystick-overlay" style={{ display: isMobile ? 'block' : 'none', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+      {/* Mobile VR Joystick Overlay - disabled so mobile/tablet uses pure AR */}
+      <div id="vr-joystick-overlay" style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
         <div id="vr-joystick-zone" style={{ position: 'absolute', bottom: '50px', left: '50px', width: '150px', height: '150px', background: 'rgba(255,255,255,0.2)', borderRadius: '50%', pointerEvents: 'auto', touchAction: 'none' }}>
           <div id="vr-joystick-knob" style={{ position: 'absolute', top: '50px', left: '50px', width: '50px', height: '50px', background: 'rgba(255,255,255,0.8)', borderRadius: '50%', pointerEvents: 'none', transform: 'translate(0px, 0px)' }}></div>
         </div>
